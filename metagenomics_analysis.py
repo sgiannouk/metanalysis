@@ -305,6 +305,14 @@ def denoising(batch):
 	export(f"{denoise_dir}/{batch}/denoising_stats.qzv")
 	return 
 
+def decontam(batch):
+	""" Using the statistical method Decontam to identify contaminating DNA features from the 
+	Negative Controls and remove them in order to capture a more accurate picture of sampled 
+	communities in the metagenomics data."""
+
+	# We will export the represena
+	return
+
 def merge_denoised_data(batch_to_analyse):
 	""" Merging different batches of representative 
 	sequences and feature tables """
