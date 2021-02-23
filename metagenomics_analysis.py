@@ -29,6 +29,8 @@ metadata_file = "/shared/projects/martyna_rrna_illumina_igtp/test_data/clinical_
 # batch_to_analyse = ["batch2",  "batch3"]
 # inputDir = '/shared/projects/martyna_rrna_illumina_igtp'
 # metadata_file = "/shared/projects/martyna_rrna_illumina_igtp/clinical_data.txt"
+
+rscripts = f"{os.path.dirname(os.path.realpath(__file__))}/Ranalysis"
 # Configuration file needed for FastQ Screen
 fastQscreen_config = "/home/stavros/references/fastQscreen_references/fastq_screen.conf"
 # SILVA database
@@ -49,7 +51,7 @@ requiredArgs = parser.add_argument_group('required arguments')
 requiredArgs.add_argument('-i', '--input_dir', dest='input_dir', metavar='', required=False,
 						   help="Path of the input directory that contains the raw data.\nBoth forward and reverse reads are expected to be found\nin this directory.")
 # Number of threads/CPUs to be used
-parser.add_argument('-th', '--threads', dest='threads', default=str(70), metavar='', 
+parser.add_argument('-th', '--threads', dest='threads', default=str(80), metavar='', 
                 	help="Number of threads to be used in the analysis")
 # Number of threads/CPUs to be used
 parser.add_argument('-fp', '--forwardPrimer', dest='forwardPrimer', default="CCTACGGGNGGCWGCAG", metavar='', required=False, 
@@ -85,6 +87,7 @@ denoise_dir = os.path.join(analysis_dir, "denoising_analysis")  # Denoising outp
 taxonomy_dir = os.path.join(analysis_dir, "taxonomic_analysis")  # Taxonomic analysis
 diversity_dir = os.path.join(analysis_dir, "diversity_analysis")  # Diversity analysis
 
+
 adonis_dir = os.path.join(diversity_dir, "adonis_analysis")
 statistical_analysis_dir = os.path.join(diversity_dir, "statistical_analysis")
 
@@ -95,7 +98,7 @@ random_forest_dir = os.path.join(analysis_dir, "random_forest")
 # Reporting directories
 qc_reports = os.path.join(analysis_dir, "reports/QC_reports")
 pipeline_reports = os.path.join(analysis_dir, "reports/pipeline_reports")
-
+if not os.path.exists(pipeline_reports): os.makedirs(pipeline_reports)
 
 
 
@@ -128,7 +131,7 @@ def quality_control(batch, R1list):
 
 	prepr_qc_reports = f'{qc_reports}/{batch}'
 	mfiltered_data = ' '.join(R1list)  # Obtaining the preprocessed reads
-	if not os.path.exists(pipeline_reports): os.makedirs(pipeline_reports)
+	
 	if not os.path.exists(prepr_qc_reports): os.makedirs(prepr_qc_reports)
 	
 
@@ -300,7 +303,7 @@ def denoising(batch):
 	"qiime metadata tabulate",  # Calling qiime2 metadata tabulate
 	"--m-input-file", f"{denoise_dir}/{batch}/denoising_stats.qza",  # Input stats file
 	"--o-visualization", f"{denoise_dir}/{batch}/denoising_stats.qzv",  # Output results to directory
-	"2>>", os.path.join(pipeline_reports, "5_denoising_denoisingStats-report.log")])  # Output denoisingVisualStats report
+	"2>>", os.path.join(pipeline_reports, "5_denoising_denoisingStats-report.log")])  # Output report
 	subprocess.run(denoisingStats, shell=True)
 	export(f"{denoise_dir}/{batch}/denoising_stats.qzv")
 	return 
@@ -309,8 +312,57 @@ def decontam(batch):
 	""" Using the statistical method Decontam to identify contaminating DNA features from the 
 	Negative Controls and remove them in order to capture a more accurate picture of sampled 
 	communities in the metagenomics data."""
+	print(f'\n\t{datetime.now().strftime("%d.%m.%Y %H:%M")} DECONTAMINATING ({batch})')
 
-	# We will export the represena
+
+
+	# Running decontam
+	print(f'\n{datetime.now().strftime("%d.%m.%Y %H:%M")}  Decontam - Running the decontamination task on R: in progress ..')
+	decontam = " ".join([
+	"Rscript",  # Call Rscript
+	f"{rscripts}/decontam.R",  # Calling the diffExpr_ExplAnalysis.R script
+	f"{denoise_dir}/{batch}/table.qza",  # Input feature matrix
+	args.metadata,  # Input metadata
+	f"{denoise_dir}/{batch}",  # Output directory
+	# "2>>", os.path.join(pipeline_reports, "1_decontam_decontam-report.txt")
+	])  # Directory where all reports reside
+	subprocess.run(decontam, shell=True)
+
+	# Converting the .tsv to .biom
+	biomconvert = ' '.join([
+	"biom convert",  # Calling biom convert
+	"--input-fp", f"{denoise_dir}/{batch}/decontam_filtered_table.tsv",  # The input BIOM table
+	"--output-fp", f"{denoise_dir}/{batch}/decontam_filtered_table.biom",  # The output BIOM table
+	"--to-hdf5",  # Output to hdf5 format
+	# "2>>", os.path.join(pipeline_reports, "2_decontam_biomconvert-report.log")
+	])  # Output report
+	subprocess.run(biomconvert, shell=True)
+
+	# # Importing the decontam feature matrix 
+	# importFeatureMat = ' '.join([
+	# "qiime tools import",  # Calling qiime tools import
+	# "--input-path", f"{denoise_dir}/{batch}/decontam_filtered_table.biom",  # Path to representative_sequences.qza file that should be exported
+	# "--output-path", f"{denoise_dir}/{batch}/decontam_filtered_table.qza",  # Output reports
+	# "--type \'FeatureTable[Frequency]\'",  # Output 
+	# "--source-format BIOMV210Format",  # 
+	# "2>>", os.path.join(pipeline_reports, "3_decontam_iimportFeatureMat-report.log")])  # Output report
+	# subprocess.run(importFeatureMat, shell=True)
+
+
+	# # Exporting the decontam representative sequences 
+	# exportReprSeqs = ' '.join([
+	# "qiime feature-table filter-seqs",  # Calling qiime feature-table filter-seqs
+	# "--i-sequences", f"{denoise_dir}/{batch}/representative_sequences.qza",  # Path to representative_sequences.qza file that should be exported
+	# "--i-table", f"{denoise_dir}/{batch}/decontam_reprSequences",  # Output reports
+	# "--o-filtered-sequences",
+	# "2>>", os.path.join(pipeline_reports, "2_decontam_exportReprSeqs-report.log")])  # Output report
+	# subprocess.run(exportReprSeqs, shell=True)
+
+	# qiime feature-table filter-seqs \
+ #   rep-seqs.qza \
+ #   table_filtered_decontam.qza \
+ #   sequences-filtered_decontam-no-mitochondria-no-chloroplast.qza
+
 	return
 
 def merge_denoised_data(batch_to_analyse):
@@ -825,17 +877,19 @@ def main():
 	print(f'\n- In total samples from {len(batch_to_analyse)} batches will be processed in this analysis..')
 	
 	for batch in batch_to_analyse:
-		# if batch == 'batch2':
-		pairedReads, R1list = assess_inputdata(batch)  # Assessing all input fastq files and obtaining the pairs to be analysed
-		print(f'- In total {len(R1list)} samples will be processed from {batch}..')
+		# # if batch == 'batch2':
+		# pairedReads, R1list = assess_inputdata(batch)  # Assessing all input fastq files and obtaining the pairs to be analysed
+		# print(f'- In total {len(R1list)} samples will be processed from {batch}..')
 		
-		# quality_control(batch, R1list)  # Checking the quality of the reads
+		# # quality_control(batch, R1list)  # Checking the quality of the reads
 
 		# ## Preprocessing of the input data
 		# primer_removal(batch, pairedReads)  # Performing quality trimming and removal of all primers on both reads
 		
 		# ## Qiime2 analysis - denoising
 		# denoising(batch)
+
+		decontam(batch)  # Performing decontamination
 	
 	# merge_denoised_data(batch_to_analyse)
 
