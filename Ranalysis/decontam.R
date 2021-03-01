@@ -24,7 +24,6 @@ library("decontam")
 library("phyloseq")
 library("ggplot2")
 library("qiime2R")
-library("biomformat")
 
 
 
@@ -61,7 +60,6 @@ decontam_dataf <- isContaminant(metatableR, # A feature table recording the obse
                   normalize = TRUE, # Normalise
                   detailed = TRUE)
 
-print(  paste("", sep="")    )
 # Obtaining the identified contaminant ASVs
 microbiome_asvs <- row.names(decontam_dataf[decontam_dataf$contaminant == FALSE, ])
 # Obtaining the ASV table from the metatableR 
@@ -69,6 +67,6 @@ asv_table <- as.data.frame(otu_table(metatableR))
 # Final metatable without the identified contaminant ASVs
 final_metatable <- asv_table[row.names(asv_table) %in% microbiome_asvs, ]
 # Writing the output filtered feature table in a .biom format
-write_biom(make_biom(final_metatable), biom_file=file.path(outdir, "decontam_filtered_table.biom"))
-# write.table(final_metatable, file=paste(outdir,"/decontam_filtered_table.tsv", sep=""), sep="\t", row.names=T, col.names=NA, quote=F)
+# write_biom(make_biom(final_metatable), biom_file=file.path(outdir, "decontam_filtered_table_R.biom"))
+write.table(final_metatable, file=paste(outdir,"/decontam_filtered_table.tsv", sep=""), sep="\t", row.names=T, col.names=NA, quote=F)
 
