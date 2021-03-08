@@ -1,15 +1,6 @@
 ###Stavros Giannoukakos###
 ##University of Granada##
 
-# To activate this environment, use
-#
-#     $ conda activate qiime2
-#     $ conda activate qiime2-202011
-#
-# To deactivate an active environment, use
-#
-#     $ conda deactivate
-
 #Version of the program
 __version__ = "0.2.0"
 
@@ -33,14 +24,15 @@ metadata_file = "/shared/projects/martyna_rrna_illumina_igtp/balf_microbiome/cli
 
 rscripts = f"{os.path.dirname(os.path.realpath(__file__))}/Ranalysis"
 # Calling Qiime2 tools from its conda environment
-qiime2_env = "/home/stavros/playground/progs/anaconda3/envs/qiime2/bin"
+qiime2_env = "/home/stavros/playground/progs/anaconda3/envs/qiime2-2021.2/bin"
 # Configuration file needed for FastQ Screen
 fastQscreen_config = "/home/stavros/references/fastQscreen_references/fastq_screen.conf"
 # SILVA database
-silva_reference = "/home/stavros/playground/progs/16S_subsidiary_files/SILVA_132/rep_set/rep_set_16S_only/99/silva_132_99_16S.fna"
-silva_taxinomy = "/home/stavros/playground/progs/16S_subsidiary_files/SILVA_132/taxonomy/16S_only/99/taxonomy_7_levels.txt"
-silva_99_classifier = "/home/stavros/playground/progs/16S_subsidiary_files/silva_132_99_v3v4_scikitv0.21.2.qza"  # scikit-learn version 0.21.2.
-# silva_99_classifier = "/home/stavros/playground/progs/16S_subsidiary_files/silva_132_99_v3v4.qza"  # scikit-learn version 0.18.0.
+silva_taxonomy = "/home/stavros/references/metagenomics_dbs/SILVA/silva-138-99-tax.qza"
+silva_reference = "/home/stavros/references/metagenomics_dbs/SILVA/silva-138-99-seqs.qza"
+silva_reference_targeted = "/home/stavros/references/metagenomics_dbs/SILVA/silva-138-99-seqs_targeted.qza"
+silva_99_classifier = "/home/stavros/references/metagenomics_dbs/SILVA/silva_138_99_v3v4_scikitv0.23.1.qza"  # scikit-learn version 0.23.1.
+
 
 
 usage = "metagenomics_analysis [options] -i <input_directory/input_files>"
@@ -54,7 +46,7 @@ requiredArgs = parser.add_argument_group('required arguments')
 requiredArgs.add_argument('-i', '--input_dir', dest='input_dir', metavar='', required=False,
 						   help="Path of the input directory that contains the raw data.\nBoth forward and reverse reads are expected to be found\nin this directory.")
 # Number of threads/CPUs to be used
-parser.add_argument('-th', '--threads', dest='threads', default=str(30), metavar='', 
+parser.add_argument('-th', '--threads', dest='threads', default=str(45), metavar='', 
                 	help="Number of threads to be used in the analysis")
 # Number of threads/CPUs to be used
 parser.add_argument('-fp', '--forwardPrimer', dest='forwardPrimer', default="CCTACGGGNGGCWGCAG", metavar='', required=False, 
@@ -64,12 +56,12 @@ parser.add_argument('-rp', '--reversePrimer', dest='reversePrimer', default="GAC
                 	help="Sequence of the reverse primer")
 # Metadata file
 parser.add_argument('-m', '--metadata', dest='metadata', required=False, metavar='', 
-                	help="Metadata file containing several info conserning the\ninput data")
+                	help="Metadata file containing several info concerning the\ninput data")
 # Path of where the output folder should be located
 parser.add_argument('-o', '--output_dir', dest='output_dir', default=os.path.dirname(os.path.realpath(__file__)), 
 					help="Path of the directory that will host the analysis.\n(default: <current_directory>)")
 # Display the version of the pipeline 
-parser.add_argument('-v', '--version', action='version', version='%(prog)s {0}'.format(__version__))
+parser.add_argument('-v', '--version', action='version', version=f'%(prog)s {__version__}')
 
 # Get the options and return them
 args = parser.parse_args()
@@ -82,22 +74,15 @@ args.metadata = metadata_file
 args.input_dir = inputDir
 
 # Main directories hosting the analysis
-analysis_dir = os.path.join(args.output_dir, "test_all")
+analysis_dir = os.path.join(args.output_dir, "balf_metanalysis")
 reports_dir = os.path.join(analysis_dir, "reports")  # Reports directory
 prepr_dir = os.path.join(analysis_dir, "preprocessed_data")  # Save processed .fastq files
 inputqiime_dir = os.path.join(analysis_dir, "qiime2_input_data")  # Input data directory
 denoise_dir = os.path.join(analysis_dir, "denoising_analysis")  # Denoising output
 taxonomy_dir = os.path.join(analysis_dir, "taxonomic_analysis")  # Taxonomic analysis
+krona_dir = os.path.join(analysis_dir, "taxonomic_analysis/krona_visualisation")  # Krona taxonomy visual
 diversity_dir = os.path.join(analysis_dir, "diversity_analysis")  # Diversity analysis
-
-
-adonis_dir = os.path.join(diversity_dir, "adonis_analysis")
-statistical_analysis_dir = os.path.join(diversity_dir, "statistical_analysis")
-
-abundanceAnalysis = os.path.join(analysis_dir, "differential_abundance_analysis")
-biplots = os.path.join(analysis_dir, "PCoA_biplot_analysis")
 random_forest_dir = os.path.join(analysis_dir, "random_forest")
-
 # Reporting directories
 qc_reports = os.path.join(analysis_dir, "reports/QC_reports")
 pipeline_reports = os.path.join(analysis_dir, "reports/pipeline_reports")
@@ -118,7 +103,7 @@ def assess_inputdata(batch):
 			elif name.endswith((".fastq.gz", ".fq.gz")) and not name.startswith("rep") and "_R1_" in name:  # Obtaining the paired-input files
 				inR1 = os.path.join(os.path.abspath(path), name)
 				inR2 = inR1.replace("_R1_","_R2_")
-				assert (os.path.isfile(inR2)), 'Could not detect the pair of {0} ({1})'.format(inR1, inR2)
+				assert (os.path.isfile(inR2)), f'Could not detect the pair of {inR1} ({inR2})'
 				input_files.append((inR1, inR2))
 	
 	input_files = sorted(input_files, key=lambda x: x[0])
@@ -132,12 +117,11 @@ def quality_control(batch, R1list):
 	print(f'\n\t{datetime.now().strftime("%d.%m.%Y %H:%M")} QUALITY CONTROL OF THE PREPROCESSED SAMPLES ({batch})')
 	
 
+
 	prepr_qc_reports = f'{qc_reports}/{batch}'
 	mfiltered_data = ' '.join(R1list)  # Obtaining the preprocessed reads
-	
 	if not os.path.exists(prepr_qc_reports): os.makedirs(prepr_qc_reports)
 	
-
 
 	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  1|4 FastQScreen - Checking random reads for possible contamination: in progress ..')
 	fastQscreen = ' '.join([
@@ -189,7 +173,7 @@ def quality_control(batch, R1list):
 
 	os.system(f'rm {prepr_qc_reports}/*fastqc.zip')  # Removing zipped fastqc files
 	os.system(f'mv {prepr_qc_reports}/summarised_report*.html {reports_dir}')  # Moving summary reports in the reports folder
-	# os.system(f'rm -r {qc_reports}/*/summarised_report_*data'.format())  # Removing MultiQC temporary folder
+	# os.system(f'rm -r {qc_reports}/*/summarised_report_*data')  # Removing MultiQC temporary folder
 	return
 
 def primer_removal(batch, pairedReads):
@@ -252,12 +236,12 @@ def denoising(batch):
 	print(f'\n\t{datetime.now().strftime("%d.%m.%Y %H:%M")} QIIME2 ANALYSIS ({batch})')
 
 
-	# Creating input_qiime2data direcotry to save the input data qiime2 artifacts 
+	# Creating input_qiime2data directory to save the input data qiime2 artifacts 
 	if not os.path.exists(inputqiime_dir): os.makedirs(inputqiime_dir)  
 
 
 	""" Importing and denoising the preprocessed PE reads """
-	print(f'\n\t{datetime.now().strftime("%d.%m.%Y %H:%M")} Importing the preprocessed reads to the Qiime2 Artifact: in progress ..')
+	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Importing the preprocessed reads to the Qiime2 Artifact: in progress ..')
 	importingSamplesToQiime2 =	' '.join([
 	f"{qiime2_env}/qiime tools import",  # Run QIIME IMPORT to import data and create a new QIIME 2 Artifact
 	"--type", "\'SampleData[PairedEndSequencesWithQuality]\'",  # The semantic type of the artifact that will be created upon importing
@@ -267,7 +251,7 @@ def denoising(batch):
 	"2>>", os.path.join(pipeline_reports, "1_denoising_importingSamplesToQiime2-report.log")])  # Output denoising report
 	subprocess.run(importingSamplesToQiime2, shell=True)
 
-	print(f'\n\t{datetime.now().strftime("%d.%m.%Y %H:%M")} Generating interactive positional quality plots: in progress ..')
+	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Generating interactive positional quality plots: in progress ..')
 	importSamplesQC =	' '.join([
 	f"{qiime2_env}/qiime demux summarize",  # Calling qiime demux summarize to quality of each sample
 	"--quiet",  # Silence output if execution is successful
@@ -279,7 +263,7 @@ def denoising(batch):
 
 	""" Denoising is an attempt to correct reads with sequencing errors and then 
 	remove chimeric sequences originating from different DNA templates. """
-	print(f'\n\t{datetime.now().strftime("%d.%m.%Y %H:%M")} Denoising, dereplicating and filtering chimera sequences from the paired-end data: in progress ..')
+	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Denoising, dereplicating and filtering chimera sequences from the paired-end data: in progress ..')
 	dada2 = ' '.join([
 	f"{qiime2_env}/qiime dada2 denoise-paired",  # Call qiime dada2 to denoise the preprocessed data
 	"--p-n-threads", args.threads,  # Number of threads to use
@@ -291,7 +275,7 @@ def denoising(batch):
 	"2>>", os.path.join(pipeline_reports, "3_denoising_dada2-report.log")])  # Output denoising report
 	subprocess.run(dada2, shell=True)
 
-	print(f'\n\t{datetime.now().strftime("%d.%m.%Y %H:%M")} Feature table summary: in progress ..')
+	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Feature table summary: in progress ..')
 	featureTableSummary = ' '.join([
 	f"{qiime2_env}/qiime feature-table summarize",  # Calling qiime2 feature-table summarize function
 	"--m-sample-metadata-file", args.metadata,  # Metadata file
@@ -302,7 +286,7 @@ def denoising(batch):
 	subprocess.run(featureTableSummary, shell=True)
 	export(f"{denoise_dir}/{batch}/feature_table.qzv")
 
-	print(f'\n\t{datetime.now().strftime("%d.%m.%Y %H:%M")} Visualising the denoising stats: in progress ..')
+	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Visualising the denoising stats: in progress ..')
 	denoisingStats = ' '.join([
 	f"{qiime2_env}/qiime metadata tabulate",  # Calling qiime2 metadata tabulate
 	"--m-input-file", f"{denoise_dir}/{batch}/denoising_stats.qza",  # Input stats file
@@ -321,7 +305,7 @@ def decontam(batch):
 
 
 	# Running decontam
-	print(f'\n{datetime.now().strftime("%d.%m.%Y %H:%M")}  Decontam - Running the decontamination task on R: in progress ..')
+	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Decontam - Running the decontamination task on R: in progress ..')
 	decontam = " ".join([
 	"Rscript",  # Call Rscript
 	f"{rscripts}/decontam.R",  # Calling the diffExpr_ExplAnalysis.R script
@@ -340,7 +324,8 @@ def decontam(batch):
 	"2>>", os.path.join(pipeline_reports, "2_decontam_biomconvert-report.log")])  # Output report
 	subprocess.run(biomconvert, shell=True)
 	
-	# Importing the decontam feature matrix 
+	# Importing the decontam feature matrix
+	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Decontam - Importing the decontam results to Qiime2: in progress ..')
 	importFeatureMat = ' '.join([
 	f"{qiime2_env}/qiime tools import",  # Calling qiime tools import
 	"--input-path", f"{denoise_dir}/{batch}/decontam_filtered_table.biom",  # Path to representative_sequences.qza file that should be exported
@@ -349,37 +334,46 @@ def decontam(batch):
 	"2>>", os.path.join(pipeline_reports, "3_decontam_iimportFeatureMat-report.log")])  # Output report
 	subprocess.run(importFeatureMat, shell=True)
 
-
 	# Exporting the decontam representative sequences 
+	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Decontam - Applying the decontamination results to the representative sequences: in progress ..')
 	exportReprSeqs = ' '.join([
 	f"{qiime2_env}/qiime feature-table filter-seqs",  # Calling qiime feature-table filter-seqs
 	"--i-data", f"{denoise_dir}/{batch}/representative_sequences.qza",  #  The sequences from which features should be filtered
 	"--i-table", f"{denoise_dir}/{batch}/decontam_filtered_table.qza",  # Table containing feature ids used for id-based filtering
 	"--o-filtered-data", f"{denoise_dir}/{batch}/representative_sequences_filt.qza",  # The resulting filtered sequences
-	"2>>", os.path.join(pipeline_reports, "2_decontam_exportReprSeqs-report.log")])  # Output report
+	"2>>", os.path.join(pipeline_reports, "4_decontam_exportReprSeqs-report.log")])  # Output report
 	subprocess.run(exportReprSeqs, shell=True)
 
+	# Removing all Negative Control samples from the analysis 
+	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Decontam - Removing the Negative Control samples from the analysis: in progress ..')
+	remove_negctrls = ' '.join([
+	f"{qiime2_env}/qiime feature-table filter-samples",  # Calling qiime feature-table filter-samples
+	"--i-table", f"{denoise_dir}/{batch}/decontam_filtered_table.qza",  # Table containing feature ids used for id-based filtering
+	"--m-metadata-file", args.metadata,  # Metadata file
+	"--p-where", "\"[SampleType]='Negative control'\"",    # Removing samples indicated as 'Negative controls' in the metadata
+	"--p-exclude-ids",  # If true, the samples selected by 'metadata' or 'where' parameters will be excluded from the filtered table
+	"--o-filtered-table", f"{denoise_dir}/{batch}/decontam_filtered_table_noNegCtrls.qza",  # The resulting filtered table
+	"2>>", os.path.join(pipeline_reports, "5_decontam_exportReprSeqs-report.log")])  # Output report
+	subprocess.run(remove_negctrls, shell=True)
 
-	os.system(f'rm {denoise_dir}/{batch}/representative_sequences.qza')  # Removing initial represenatative sequences
-	os.system(f'rm {denoise_dir}/{batch}/decontam_filtered_table.biom')  # Removing decontam_filtered_table.biom
-	os.system(f'rm {denoise_dir}/{batch}/decontam_filtered_table.tsv')  # Removing decontam_filtered_table.tsv
+	os.system('rm {0}/{1}/*sequences.qza {0}/{1}/*table.biom {0}/{1}/*table.tsv'.format(denoise_dir, batch))  # Removing unnecessary files
 	return
 
 def merge_denoised_data(batch_to_analyse):
 	""" Merging different batches of representative 
 	sequences and feature tables """
 	if len(batch_to_analyse) > 1:
-		print(f'\n\t{datetime.now().strftime("%d.%m.%Y %H:%M")} Combining all {len(batch_to_analyse)} sets of data feature tables: in progress ..')
-		feature_tables = ' '.join(glob.glob(f'{denoise_dir}/*/decontam_filtered_table.qza'))
+		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Combining all {len(batch_to_analyse)} sets of data feature tables: in progress ..')
+		feature_tables = ' '.join(glob.glob(f'{denoise_dir}/*/decontam_filtered_table_noNegCtrls.qza'))
 		# Combine two sets of data feature tables
 		combFeatureTable =	' '.join([
 		f"{qiime2_env}/qiime feature-table merge",  # Calling qiime feature-table merge
 		"--i-tables", feature_tables,  # Feature tables to be merged
 		"--o-merged-table", f"{denoise_dir}/table.qza",  # Output reports
 		"2>>", os.path.join(pipeline_reports, "1_merge_combFeatureTable-report.log")])  # Output importSamplesQC report
-		# subprocess.run(combFeatureTable, shell=True)
+		subprocess.run(combFeatureTable, shell=True)
 
-		print(f'\n\t{datetime.now().strftime("%d.%m.%Y %H:%M")} Combining the representative sequences of all {len(batch_to_analyse)} sets of data: in progress ..')
+		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Combining the representative sequences of all {len(batch_to_analyse)} sets of data: in progress ..')
 		sequence_tables = ' '.join(glob.glob(f'{denoise_dir}/*/representative_sequences_filt.qza'))
 		# Combine the representative sequences of the two sets of data
 		combSeqsTable =	' '.join([
@@ -388,20 +382,21 @@ def merge_denoised_data(batch_to_analyse):
 		"--o-merged-data", f"{denoise_dir}/representative_sequences.qza",  # Output reports
 		"2>>", os.path.join(pipeline_reports, "2_qiime2_combSeqsTable-report.log")])  # Output importSamplesQC report
 		subprocess.run(combSeqsTable, shell=True)
+
+		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Feature table summary of the filtered tables and sequences: in progress ..')
+		featureTableSummary = ' '.join([
+		f"{qiime2_env}/qiime feature-table summarize",  # Calling qiime2 feature-table summarize function
+		"--m-sample-metadata-file", args.metadata,  # Metadata file
+		"--quiet",  # Silence output if execution is successful
+		"--i-table", f"{denoise_dir}/table.qza",  # The feature table to be summarized
+		"--o-visualization", f"{denoise_dir}/feature_table.qzv",  # Output results to directory
+		"2>>", os.path.join(pipeline_reports, "3_qiime2_featureTableSummary-report.log")])  # Output featureTableSummary report
+		subprocess.run(featureTableSummary, shell=True)
+		export(f"{denoise_dir}/feature_table.qzv")
 	else:
 		os.system(f'mv {denoise_dir}/*/decontam_filtered_table.qza {denoise_dir}/table.qza')  # Moving table.qza to the denoising directory
 		os.system(f'mv {denoise_dir}/*/representative_sequences_filt.qza {denoise_dir}/representative_sequences.qza')  # Moving representative_sequences.qza to the denoising directory
-
-	print(f'\n\t{datetime.now().strftime("%d.%m.%Y %H:%M")} Feature table summary of the filtered tables and sequences: in progress ..')
-	featureTableSummary = ' '.join([
-	f"{qiime2_env}/qiime feature-table summarize",  # Calling qiime2 feature-table summarize function
-	"--m-sample-metadata-file", args.metadata,  # Metadata file
-	"--quiet",  # Silence output if execution is successful
-	"--i-table", f"{denoise_dir}/table.qza",  # The feature table to be summarized
-	"--o-visualization", f"{denoise_dir}/feature_table_final.qzv",  # Output results to directory
-	"2>>", os.path.join(pipeline_reports, "3_qiime2_featureTableSummary-report.log")])  # Output featureTableSummary report
-	subprocess.run(featureTableSummary, shell=True)
-	export(f"{denoise_dir}/feature_table_final.qzv")
+		os.system(f'mv -r {denoise_dir}/*/feature_table {denoise_dir}')  # Moving feature_table stats to the denoising directory
 	return
 
 def taxonomic_assignmnet():
@@ -412,103 +407,84 @@ def taxonomic_assignmnet():
 	# Importing SILVA reference taxonomy sequences
 	if not os.path.exists(taxonomy_dir): os.makedirs(taxonomy_dir)  # Creating the directory which will host the analysis
 	if not os.path.exists(silva_99_classifier):
-		print("Pre-trained classirier DOES NOT exist. Training SILVA db: in progress..")
+		print("WARNING: Pre-trained classifier DOES NOT exist. Training with SILVA db: in progress..")
 		
-		print("1/3 | Importing the reference sequences and the corresponding taxonomic classifications of SILVA123 database: in progress ..")
-		importSilvaReference = ' '.join([
-		f"{qiime2_env}/qiime tools import",  # Import function
-		"--type", "\'FeatureData[Sequence]\'",  # Type of imported data
-	  	"--input-path", silva_reference,  # Input SILVA 132 database
-	  	"--output-path", os.path.join(taxonomy_dir, "silva132_99_ASVs.qza"),  # Output file
-	  	"2>>", os.path.join(pipeline_reports, "1_taxonomyNB_importSilvaReference-report.log")])  # Output importSilvaReference report
-		subprocess.run(importSilvaReference, shell=True)
-
-		# Importing SILVA reference taxonomy annotation
-		importSilvaRefTaxonomy = ' '.join([
-		f"{qiime2_env}/qiime tools import",  # Import function
-		"--type", "\'FeatureData[Taxonomy]\'",  # Type of imported data
-		"--input-format", "HeaderlessTSVTaxonomyFormat",  # Type of input file
-	  	"--input-path", silva_taxinomy,  # Input annotation file
-	  	"--output-path", os.path.join(taxonomy_dir, "silva132_99_ASV_taxonomy.qza"),  # Output artifact 
-		"2>>", os.path.join(pipeline_reports, "1_taxonomyNB_importSilvaRefTaxonomy-report.log")])  # Output importSilvaRefTaxonomy report
-		subprocess.run(importSilvaRefTaxonomy, shell=True)
-
 		""" It has been shown that taxonomic classification accuracy of 16S rRNA gene sequences 
 		improves when a Naive Bayes classifier is trained on only the region of the target 
 		sequences that was sequenced. Here we will extract the reference sequences. """
 		# Extract sequencing-like reads from a reference database
-		print("2/3 | Extract sequencing-like reads from the reference database: in progress ..")
+		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  1/2 | Extract sequencing-like reads from the reference database: in progress ..')
 		extractRefReads = ' '.join([
 		f"{qiime2_env}/qiime feature-classifier extract-reads",
 		"--quiet",  # Silence output if execution is successful
+		"--p-n-jobs", args.threads,  # Number of separate processes to run
 		"--p-trunc-len", "466",  # Minimum amplicon length
 		"--p-f-primer", args.forwardPrimer,  # Forward primer sequence
 		"--p-r-primer", args.reversePrimer,  # Reverse primer sequence
-		"--i-sequences", os.path.join(taxonomy_dir, "silva132_99_ASVs.qza"),  # Input reference seq artifact
-		"--o-reads", os.path.join(taxonomy_dir, "silva132_reference_sequences.qza"),  # Output ref sequencing-like reads
-		"2>>", os.path.join(pipeline_reports, "2_taxonomyNB_extractRefReads-report.log")])  # Output extractRefReads report
+		"--i-sequences", silva_reference,  # Input reference seq artifact
+		"--o-reads", silva_reference_targeted,  # Output ref sequencing-like reads
+		# "2>>", os.path.join(pipeline_reports, "1_taxonomyNB_extractRefReads-report.log")
+		])  # Output extractRefReads report
 		subprocess.run(extractRefReads, shell=True)
 
 		""" We can now train a Naive Bayes classifier as follows, using 
 		the reference reads and taxonomy that we just created """
-		print("3/3 | Training the Naive Bayes classifier using the reference reads: in progress ..")
+		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  2/2 | Training the Naive Bayes classifier using the reference reads: in progress ..')
 		trainClassifier = ' '.join([
 		f"{qiime2_env}/qiime feature-classifier fit-classifier-naive-bayes",
 		"--quiet",  # Silence output if execution is successful
-		"--i-reference-reads", os.path.join(taxonomy_dir, "silva132_reference_sequences.qza"),
-		"--i-reference-taxonomy", os.path.join(taxonomy_dir, "silva132_99_ASV_taxonomy.qza"),
+		"--i-reference-reads", silva_reference_targeted,
+		"--i-reference-taxonomy", silva_taxonomy,
 		"--o-classifier", silva_99_classifier, 
-		"2>>", os.path.join(pipeline_reports, "3_taxonomyNB_trainClassifier-report.log")])  # Output trainClassifier report
+		# "2>>", os.path.join(pipeline_reports, "2_taxonomyNB_trainClassifier-report.log")
+		])  # Output trainClassifier report
 		subprocess.run(trainClassifier, shell=True)
-		export(os.path.join(taxonomy_dir, "classifier.qza"))
-		# Deleting secondry unnecessary files
-		os.system("rm {0} {1}".format(os.path.join(taxonomy_dir, "silva132_99_ASVs.qza"),\
-									  os.path.join(taxonomy_dir, "silva132_99_ASV_taxonomy.qza"),\
-									  os.path.join(taxonomy_dir, "silva132_reference_sequences.qza")))
+		# export(os.path.join(taxonomy_dir, "classifier.qza"))
+		
 	
-	""" Assign the taxonomy """
-	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Assigning the taxonomy to each ASV: in progress ..')
-	assignTaxonomy = ' '.join([
-	f"{qiime2_env}/qiime feature-classifier classify-sklearn",
-	"--quiet",  # Silence output if execution is successful
-	"--p-n-jobs", args.threads,  # Number of threads to use
-	"--i-classifier", silva_99_classifier,  # Using Silva classifier
-	"--i-reads", os.path.join(denoise_dir, "representative_sequences.qza"),  # The output sequences
-	"--o-classification", os.path.join(taxonomy_dir, "taxonomic_classification.qza"),
-	"2>>", os.path.join(pipeline_reports, "1_taxonomy_assignTaxonomy-report.log")])  # Output assignTaxonomy report
-	subprocess.run(assignTaxonomy, shell=True)
+	# """ Assign the taxonomy """
+	# print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Assigning the taxonomy to each ASV: in progress ..')
+	# assignTaxonomy = ' '.join([
+	# f"{qiime2_env}/qiime feature-classifier classify-sklearn",
+	# "--quiet",  # Silence output if execution is successful
+	# "--p-n-jobs", args.threads,  # Number of threads to use
+	# "--i-classifier", silva_99_classifier,  # Using Silva classifier
+	# "--i-reads", os.path.join(denoise_dir, "representative_sequences.qza"),  # The output sequences
+	# "--o-classification", os.path.join(taxonomy_dir, "taxonomic_classification.qza"),
+	# "2>>", os.path.join(pipeline_reports, "1_taxonomy_assignTaxonomy-report.log")])  # Output assignTaxonomy report
+	# subprocess.run(assignTaxonomy, shell=True)
 
-	outputClassifications = ' '.join([
-	f"{qiime2_env}/qiime metadata tabulate",
-	"--quiet",  # Silence output if execution is successful
-	"--m-input-file", os.path.join(taxonomy_dir, "taxonomic_classification.qza"),
-	"--o-visualization", os.path.join(taxonomy_dir, "taxonomic_classification.qzv"),
-	"2>>", os.path.join(pipeline_reports, "2_taxonomy_outputClassifications-report.log")])  # Output outputClassifications report
-	subprocess.run(outputClassifications, shell=True)
-	export(os.path.join(taxonomy_dir, "taxonomic_classification.qzv"))
+	# outputClassifications = ' '.join([
+	# f"{qiime2_env}/qiime metadata tabulate",
+	# "--quiet",  # Silence output if execution is successful
+	# "--m-input-file", os.path.join(taxonomy_dir, "taxonomic_classification.qza"),
+	# "--o-visualization", os.path.join(taxonomy_dir, "taxonomic_classification.qzv"),
+	# "2>>", os.path.join(pipeline_reports, "2_taxonomy_outputClassifications-report.log")])  # Output outputClassifications report
+	# subprocess.run(outputClassifications, shell=True)
+	# export(os.path.join(taxonomy_dir, "taxonomic_classification.qzv"))
 
-	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Generating the taxonimic barplot: in progress ..')
-	barplotOfTaxonomy = ' '.join([
-	f"{qiime2_env}/qiime taxa barplot", 
-	"--quiet",  # Silence output if execution is successful
-	"--i-table", os.path.join(denoise_dir, "table.qza"),
-	"--i-taxonomy", os.path.join(taxonomy_dir, "taxonomic_classification.qza"),
-	"--m-metadata-file", args.metadata,  # Metadata file
-	"--o-visualization", os.path.join(taxonomy_dir, "taxonomy_barplot.qzv"),
-	"2>>", os.path.join(pipeline_reports, "3_taxonomy_barplotOfTaxonomy-report.log")])  # Output barplotOfTaxonomy report
-	subprocess.run(barplotOfTaxonomy, shell=True)
-	export(os.path.join(taxonomy_dir, "taxonomy_barplot.qzv"))
+	# print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Generating the taxonomic barplot: in progress ..')
+	# barplotOfTaxonomy = ' '.join([
+	# f"{qiime2_env}/qiime taxa barplot", 
+	# "--quiet",  # Silence output if execution is successful
+	# "--i-table", os.path.join(denoise_dir, "table.qza"),
+	# "--i-taxonomy", os.path.join(taxonomy_dir, "taxonomic_classification.qza"),
+	# "--m-metadata-file", args.metadata,  # Metadata file
+	# "--o-visualization", os.path.join(taxonomy_dir, "taxonomy_barplot.qzv"),
+	# "2>>", os.path.join(pipeline_reports, "3_taxonomy_barplotOfTaxonomy-report.log")])  # Output barplotOfTaxonomy report
+	# subprocess.run(barplotOfTaxonomy, shell=True)
+	# export(os.path.join(taxonomy_dir, "taxonomy_barplot.qzv"))
 
-	# Filtering out any features with less than X counts
-	min_frequency = min_freq()
-	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Filtering out any features with less than {min_frequency} counts: in progress ..')
-	filter_feature_table = ' '.join([
-	f"{qiime2_env}/qiime feature-table filter-features",
-	"--p-min-frequency", min_frequency,  # Minimum frequency that a feature must have to be retained
-	"--i-table", os.path.join(denoise_dir, "table.qza"),
-	"--o-filtered-table", os.path.join(denoise_dir, "table_filtered.qza"),
-	"2>>", os.path.join(pipeline_reports, "4_taxonomy_filter_feature_table-report.log")])
-	subprocess.run(filter_feature_table, shell=True)
+	# # Filtering out any features with less than X counts
+	# min_frequency = min_freq()
+	# print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Filtering out any features with less than {min_frequency} counts: in progress ..')
+	# filter_feature_table = ' '.join([
+	# f"{qiime2_env}/qiime feature-table filter-features",
+	# "--p-min-frequency", min_frequency,  # Minimum frequency that a feature must have to be retained
+	# "--i-table", os.path.join(denoise_dir, "table.qza"),
+	# "--o-filtered-table", os.path.join(denoise_dir, "table_filtered.qza"),
+	# "2>>", os.path.join(pipeline_reports, "4_taxonomy_filter_feature_table-report.log")])
+	# subprocess.run(filter_feature_table, shell=True)
 	return
 
 class phylogenetics():
@@ -520,21 +496,16 @@ class phylogenetics():
 	  	rooted at its  midpoint. """
 		print(f'\n\t{datetime.now().strftime("%d.%m.%Y %H:%M")} PHYLOGENETIC DIVERSITY ANALYSIS')
 		if not os.path.exists(diversity_dir): os.makedirs(diversity_dir)  # Creating the directories which will host the analysis
-		if not os.path.exists(statistical_analysis_dir): os.makedirs(statistical_analysis_dir)
-		if not os.path.exists(adonis_dir): os.makedirs(adonis_dir)
 		self.phylogenetic_tree()
-		self.rarefication()
 		self.alpha_rarefaction()
 		self.core_diversity_analysis()
-		self.alpha_diversity_analysis()
-		self.beta_diversity_analysis()
 		return
 
-	def max_depth_and_steps_thresholds(self):
+	def max_depth_threshold(self):
 		""" Calculating the maximum depth and step for the rarefraction experiment"""
 		depth_file = os.path.join(denoise_dir, "feature_table/sample-frequency-detail.csv")
 		if not os.path.exists(depth_file):
-			sys.exit("The file {0} does NOT exist...".format(depth_file))
+			sys.exit(f"The file {depth_file} does NOT exist...")
 
 		depths = {}
 		with open(depth_file) as fin:
@@ -552,7 +523,6 @@ class phylogenetics():
 			min_depth = depths[-1][1]
 		
 		min_depth = str(depths[-1][1])
-		# steps = str(int(float(min_depth)/50))
 		return min_depth
 
 	def phylogenetic_tree(self):
@@ -571,18 +541,6 @@ class phylogenetics():
 		subprocess.run(phylogeneticdiversity_dir, shell=True)
 		return
 
-	def rarefication(self):
-		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")} Performing random subsampling ({min_depth[0]}): in progress ..')
-		randomSubsampling = ' '.join([
-		f"{qiime2_env}/qiime feature-table subsample",  # Calling qiime2 feature-table subsample
-		"--i-table", os.path.join(denoise_dir, "table.qza"),  # The feature table to be subsampled
-		"--p-axis", "\'feature\'",  # A random set of features will be selected to be retained
-		"--p-subsampling-depth", self.max_depth_and_steps_thresholds(),  # The total number of features to be randomly sampled
-		"--o-sampled-table", os.path.join(denoise_dir, "subsampled_table.qza"),  # Output results 
-		"2>>", os.path.join(pipeline_reports, "2_phylogenetics_randomSubsampling-report.log")])  # Output randomSubsampling report
-		subprocess.run(randomSubsampling, shell=True)
-		return
-
 	def alpha_rarefaction(self):
 		""" A key quality control step is to plot rarefaction curves for all 
 		the samples to determine if performed sufficient sequencing """
@@ -591,7 +549,7 @@ class phylogenetics():
 		rarefactionCurvesAnalysis =	' '.join([
 		f"{qiime2_env}/qiime diversity alpha-rarefaction",  # Calling qiime2 diversity alpha-rarefaction function
 		"--quiet",  # Silence output if execution is successful
-		"--p-max-depth", self.max_depth_and_steps_thresholds(),  # The maximum rarefaction depth
+		"--p-max-depth", self.max_depth_threshold(),  # The maximum rarefaction depth
 		"--p-steps 50",
 		"--m-metadata-file", args.metadata,  # Metadata file
 		"--i-table", os.path.join(denoise_dir, "table.qza"),  # Input feature table
@@ -614,166 +572,23 @@ class phylogenetics():
 		"--p-n-jobs", args.threads, # The number of CPUs to be used for the computation
 		"--i-phylogeny", os.path.join(diversity_dir, "rooted_tree.qza"),  # The rooted phylogenetic tree
 		"--i-table", os.path.join(denoise_dir, "table.qza"),  # The input feature table
-		"--p-sampling-depth", self.max_depth_and_steps_thresholds(),  # The total frequency that each sample should be rarefied to prior to computing diversity metrics
+		"--p-sampling-depth", self.max_depth_threshold(),  # The total frequency that each sample should be rarefied to prior to computing diversity metrics
 		"--output-dir", os.path.join(diversity_dir, "core_metrics_results"),  # Output directory that will host the core metrics
 		"2>>", os.path.join(pipeline_reports, "4_phylogenetics_diversityMetrics-report.log")])  # Output diversityMetrics report
 		subprocess.run(diversityMetrics, shell=True)
 		export(os.path.join(diversity_dir, "core_metrics_results"))
 		return
 
-	def alpha_diversity_analysis(self):
-		""" Visually and statistically compare groups of alpha diversity values """
-		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")} Creating Shannon diversity significance boxplot: in progress ..')
-		shannonSignificance =	' '.join([
-		f"{qiime2_env}/qiime diversity alpha-group-significance",  # Calling qiime diversity alpha-group-significance function
-		"--m-metadata-file", args.metadata,  # Metadata file
-		"--quiet",  # Silence output if execution is successful
-		"--i-alpha-diversity", os.path.join(diversity_dir, "core_metrics_results/shannon_vector.qza"),  # Vector of alpha diversity values by sample
-		"--o-visualization", os.path.join(statistical_analysis_dir, "shannon_diversity-significance.qzv"),  # Output stats
-		"2>>", os.path.join(pipeline_reports, "5_phylogenetics_shannonSignificance-report.log")])  # Output stats report
-		subprocess.run(shannonSignificance, shell=True)
-		export(os.path.join(statistical_analysis_dir, "shannon_diversity-significance.qzv")) 
-
-		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")} Creating Faith Phylogenetic Diversity (a measure of community richness) significance boxplot: in progress ..')
-		faithSignificance =	' '.join([
-		f"{qiime2_env}/qiime diversity alpha-group-significance",  # Calling qiime diversity alpha-group-significance function
-		"--m-metadata-file", args.metadata,  # Metadata file
-		"--quiet",  # Silence output if execution is successful
-		"--i-alpha-diversity", os.path.join(diversity_dir, "core_metrics_results/faith_pd_vector.qza"),  # Vector of alpha diversity values by sample
-		"--o-visualization", os.path.join(statistical_analysis_dir, "faith_pd-significance.qzv"),  # Output stats
-		"2>>", os.path.join(pipeline_reports, "6_phylogenetics_faithSignificance-report.log")])  # Output report
-		subprocess.run(faithSignificance, shell=True)
-		export(os.path.join(statistical_analysis_dir, "faith_pd-significance.qzv")) 
-
-		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")} Creating Evenness significance boxplot: in progress ..')
-		evennessSignificance =	' '.join([
-		f"{qiime2_env}/qiime diversity alpha-group-significance",  # Calling qiime diversity alpha-group-significance function
-		"--m-metadata-file", args.metadata,  # Metadata file
-		"--quiet",  # Silence output if execution is successful
-		"--i-alpha-diversity", os.path.join(diversity_dir, "core_metrics_results/evenness_vector.qza"),  # Vector of alpha diversity values by sample
-		"--o-visualization", os.path.join(statistical_analysis_dir, "evenness-significance.qzv"),  # Output stats
-		"2>>", os.path.join(pipeline_reports, "7_phylogenetics_evennessSignificance-report.log")])  # Output report
-		subprocess.run(evennessSignificance, shell=True)
-		export(os.path.join(statistical_analysis_dir, "evenness-significance.qzv")) 
-		return 
-
-	def beta_diversity_analysis(self):
-		""" Visually and statistically compare groups of beta diversity values """
-		# Determine whether groups of samples are significantly different from one another using a permutation-based statistical test
-		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")} Analysing sample composition in the context of Indication using PERMANOVA: in progress .')
-		permanova_indication =	' '.join([
-		f"{qiime2_env}/qiime diversity beta-group-significance",  # Calling qiime diversity beta-group-significance function
-		"--m-metadata-file", args.metadata,  # Metadata file
-		"--p-pairwise",  # Perform pairwise tests between all pairs of groups in addition to the test across all groups
-		"--m-metadata-column", "Indication_I",  # Categorical sample metadata column
-		"--quiet",  # Silence output if execution is successful
-		"--i-distance-matrix", os.path.join(diversity_dir, "core_metrics_results/unweighted_unifrac_distance_matrix.qza"),  # Vector of beta diversity values by sample
-		"--o-visualization", os.path.join(statistical_analysis_dir, "unweighted_unifrac_indication_I-significance.qzv"),  # Output stats
-		# "2>>", os.path.join(pipeline_reports, "8_phylogenetics_permanova_indication-report.log")
-		])  # Output report
-		subprocess.run(permanova_indication, shell=True)
-		export(os.path.join(statistical_analysis_dir, "unweighted_unifrac_indication_I-significance.qzv")) 
-
-		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")} Analysing sample composition in the context of Indication_Code using PERMANOVA: in progress ..')
-		permanova_indication_code =	' '.join([
-		f"{qiime2_env}/qiime diversity beta-group-significance",  # Calling qiime diversity beta-group-significance function
-		"--m-metadata-file", args.metadata,  # Metadata file
-		"--p-pairwise",  # Perform pairwise tests between all pairs of groups in addition to the test across all groups
-		"--m-metadata-column", "Indication_I",  # Categorical sample metadata column
-		"--quiet",  # Silence output if execution is successful
-		"--i-distance-matrix", os.path.join(diversity_dir, "core_metrics_results/weighted_unifrac_distance_matrix.qza"),  # Vector of beta diversity values by sample
-		"--o-visualization", os.path.join(statistical_analysis_dir, "weighted_unifrac_indication_I-significance.qzv"),  # Output stats
-		# "2>>", os.path.join(pipeline_reports, "9_phylogenetics_permanova_indication_code-report.log")
-		])  # Output report
-		subprocess.run(permanova_indication_code, shell=True)
-		export(os.path.join(statistical_analysis_dir, "weighted_unifrac_indication_I-significance.qzv")) 
-
-		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")} Adonis action to look at a multivariate mode: in progress ..')
-		adonis =	' '.join([
-		f"{qiime2_env}/qiime diversity adonis",
-		"--i-distance-matrix", os.path.join(diversity_dir, "core_metrics_results/unweighted_unifrac_distance_matrix.qza"),
-		"--m-metadata-file", args.metadata,
-		"--o-visualization", os.path.join(adonis_dir, "unweighted_adonis.qzv"),
-		"--p-formula", "Indication_I+Gender",
-		# "2>>", os.path.join(pipeline_reports, "10_phylogenetics_adonis-report.log")
-		])  # Output report
-		subprocess.run(adonis, shell=True)
-		export(os.path.join(adonis_dir, "unweighted_adonis.qzv")) 
-
-		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")} Adonis action to look at a multivariate mode: in progress ..')
-		adonis2 =	' '.join([
-		f"{qiime2_env}/qiime diversity adonis",
-		"--i-distance-matrix", os.path.join(diversity_dir, "core_metrics_results/weighted_unifrac_distance_matrix.qza"),
-		"--m-metadata-file", args.metadata,
-		"--o-visualization", os.path.join(adonis_dir, "weighted_adonis.qzv"),
-		"--p-formula", "Indication_I+Gender",
-		# "2>>", os.path.join(pipeline_reports, "11_phylogenetics_adonis2-report.log")
-		])  # Output report
-		subprocess.run(adonis2, shell=True)
-		export(os.path.join(adonis_dir, "weighted_adonis.qzv")) 
-		return
-
-def differential_abundance():
-	""" Following the tutorial for ANCOM, we want to collapse the table to genus level. 
-	Before this, we will filter out low-abundance features. First we will removing those 
-	that only appear 10 times or fewer across all samples, as well as those that only 
-	appear in one sample """
-	print("\n\t{0} DIFFERENTIAL ABUNDANCE".format(datetime.now().strftime("%d.%m.%Y %H:%M")))
-	if not os.path.exists(abundanceAnalysis): os.makedirs(abundanceAnalysis)  # Creating the "qiime2_analysis" directory
+def downstream_analysis():
 	
-	""" Applying basic filters to the features """
-	print("{0} Applying basic filters to discard low frequent features: in progress ..".format(datetime.now().strftime("%d.%m.%Y %H:%M")))
-	filteringFeatures = ' '.join([
-	f"{qiime2_env}/qiime feature-table filter-features",  # Calling qiime2 feature-table filter-features function
-	"--quiet",  # Silence output if execution is successful
-	"--i-table", os.path.join(denoise_dir, "table.qza"),  # Input feature table to be summarized
-	"--p-min-frequency", min_freq(),  # Least frequency that a feature must have to be retained
-	"--p-min-samples 2",  # The minimum number of samples that a feature must be observed in to be retained
-	"--o-filtered-table", os.path.join(abundanceAnalysis, "feature_table_filtered.qza"),  # Output file
-	"2>>", os.path.join(pipeline_reports, "qiime2_filteringFeatures-report.log")])  # Output denoising report
-	subprocess.run(filteringFeatures, shell=True)
-
-
-	""" Collapse table at genus level """
-	print("{0} Collapsing the table at genus level: in progress ..".format(datetime.now().strftime("%d.%m.%Y %H:%M")))
-	collapsingTable = ' '.join([
-	f"{qiime2_env}/qiime taxa collapse",  # Calling qiime taxa collapse function
-	"--quiet",  # Silence output if execution is successful
-	"--i-table", os.path.join(abundanceAnalysis, "feature_table_filtered.qza"),  # Input feature table to be summarized
-	"--i-taxonomy", os.path.join(taxonomy_dir, "taxonomic_classification.qza"),
-	"--p-level 6",  # The minimum number of samples that a feature must be observed in to be retained
-	"--o-collapsed-table", os.path.join(abundanceAnalysis, "feature_table_for_ANCOM.qza"),  # Output file
-	"2>>", os.path.join(pipeline_reports, "qiime2_collapsingTable-report.log")])  # Output denoising report
-	subprocess.run(collapsingTable, shell=True)
-	
-	addPseudocounts = ' '.join([
-	f"{qiime2_env}/qiime composition add-pseudocount",  # Calling qiime composition add-pseudocount function
-	"--quiet",  # Silence output if execution is successful
-	"--i-table", os.path.join(abundanceAnalysis, "feature_table_for_ANCOM.qza"),  # Input table
-	"--o-composition-table", os.path.join(abundanceAnalysis, "ANCOM_ready_table.qza"),  # Output file
-	"2>>", os.path.join(pipeline_reports, "qiime2_addPseudocounts-report.log")])  # Output denoising report
-	subprocess.run(addPseudocounts, shell=True)
-
-	# Run ANCOM
-	print("{0} Running ANCOM: in progress ..".format(datetime.now().strftime("%d.%m.%Y %H:%M")))
-	ancom = ' '.join([
-	f"{qiime2_env}/qiime composition ancom",  # Calling qiime composition add-pseudocount function
-	"--verbose",  # Silence output if execution is successful
-	"--i-table", os.path.join(abundanceAnalysis, "ANCOM_ready_table.qza"),  # Input file
-	"--m-metadata-file", args.metadata,
-	"--m-metadata-column", "Indication_I",
-	"--o-visualization", os.path.join(abundanceAnalysis, "ancom_group_results.qzv"),  # Input table
-	"2>>", os.path.join(pipeline_reports, "qiime2_ancom-report.log")])  # Output denoising report
-	subprocess.run(ancom, shell=True)
-	export(os.path.join(abundanceAnalysis, "ancom_group_results.qzv"))
 	return
 
 def ml_approach():
 
-	print("\n\t{0} MACHINE LEARNING APPROACHES".format(datetime.now().strftime("%d.%m.%Y %H:%M")))
+	print(f'\n\t{datetime.now().strftime("%d.%m.%Y %H:%M")} MACHINE LEARNING APPROACHES')
 
 
-	print("{0} Random Forst classifiers for predicting sample characteristics: in progress ..".format(datetime.now().strftime("%d.%m.%Y %H:%M")))
+	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")} Random Forst classifiers for predicting sample characteristics: in progress ..')
 	random_forest = ' '.join([
 	f"{qiime2_env}/qiime sample-classifier classify-samples",
 	"--i-table", os.path.join(denoise_dir, "table.qza"),
@@ -786,7 +601,7 @@ def ml_approach():
 	])  # Output denoising report
 	# subprocess.run(random_forest, shell=True)
 
-	print("{0} Generating heatmap: in progress ..".format(datetime.now().strftime("%d.%m.%Y %H:%M")))
+	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")} Generating heatmap: in progress ..')
 	heatmap = ' '.join([
 	f"{qiime2_env}/qiime sample-classifier heatmap",
 	"--i-table", os.path.join(denoise_dir, "table.qza"),
@@ -803,7 +618,6 @@ def ml_approach():
 	])  # Output denoising report
 	subprocess.run(heatmap, shell=True)
 	export(os.path.join(random_forest_dir, "heatmap.qzv"))
-
 	return
 
 def calculateMinMax(forwardRead):
@@ -852,7 +666,7 @@ def export(exportFile):
 				subprocess.run(f"{qiime2_env}/qiime tools export --input-path {file} --output-path {file[:-4]}", shell=True)
 
 	if exportFile.endswith(".qzv"):
-		os.system('rm {0}'.format(exportFile))	
+		os.system(f'rm {exportFile}')	
 	return 
 
 def summarisation():
@@ -870,7 +684,7 @@ def summarisation():
 				os.remove(file)
 			elif file.endswith('bbduk-report.log') or file.endswith('fastP-report.log')\
 				or file.endswith('fastQscreen-report.log'):
-				os.system('mv {0} {1}'.format(file, qc_reports))
+				os.system(f'mv {file} {qc_reports}')
 	
 	num = 0
 	# Mentioning the remaining log files which have warnings!
@@ -887,10 +701,10 @@ def main():
 	print(f'\t{datetime.now().strftime("%d.%m.%Y %H:%M")} METAGENOMICS ANALYSIS')
 	print(f'\n- In total samples from {len(batch_to_analyse)} batches will be processed in this analysis..')
 	
-	# for batch in batch_to_analyse:
-		# if batch == 'batch14':
-		# pairedReads, R1list = assess_inputdata(batch)  # Assessing all input fastq files and obtaining the pairs to be analysed
-		# print(f'- In total {len(R1list)} samples will be processed from {batch}..')
+	for batch in batch_to_analyse:
+		### if batch == 'batch14':
+		pairedReads, R1list = assess_inputdata(batch)  # Assessing all input fastq files and obtaining the pairs to be analysed
+		print(f'- In total {len(R1list)} samples will be processed from {batch}..')
 		
 		
 		# quality_control(batch, R1list)  # Checking the quality of the reads
@@ -905,12 +719,11 @@ def main():
 	
 	# merge_denoised_data(batch_to_analyse)
 
-	# ## Downstream analysis
-	# taxonomic_assignmnet()
+	taxonomic_assignmnet()
 
-	# phylogenetics(args.threads, args.metadata)
+	# phylogenetics()
 
-	# differential_abundance()
+	# downstream_analysis()
 
 	# ml_approach()
 
