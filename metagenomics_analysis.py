@@ -13,14 +13,18 @@ from datetime import datetime
 import shutil, fnmatch, glob, sys, os
 
 ########### TEST ############
-# batch_to_analyse = ["batch14",  "batch16"]
+# batch_to_analyse = ["batch1",  "batch16"]
 # inputDir = '/shared/projects/martyna_rrna_illumina_igtp/test_data'
 # metadata_file = "/shared/projects/martyna_rrna_illumina_igtp/test_data/clinical_data.txt"
 #############################
 
-batch_to_analyse = ["batch2",  "batch3", "batch4"]
-inputDir = '/shared/projects/martyna_rrna_illumina_igtp/balf_microbiome'
-metadata_file = "/shared/projects/martyna_rrna_illumina_igtp/balf_microbiome/clinical_data.txt"
+batch_to_analyse = ["batch1"]
+inputDir = '/shared/projects/martyna_rrna_illumina_igtp/blood_microbiome'
+metadata_file = "/shared/projects/martyna_rrna_illumina_igtp/blood_microbiome/clinical_data.txt"
+
+# batch_to_analyse = ["batch2",  "batch3", "batch4"]
+# inputDir = '/shared/projects/martyna_rrna_illumina_igtp/balf_microbiome'
+# metadata_file = "/shared/projects/martyna_rrna_illumina_igtp/balf_microbiome/clinical_data.txt"
 
 rscripts = f"{os.path.dirname(os.path.realpath(__file__))}/Ranalysis"
 # Calling Qiime2 tools from its conda environment
@@ -74,7 +78,7 @@ args.metadata = metadata_file
 args.input_dir = inputDir
 
 # Main directories hosting the analysis
-analysis_dir = os.path.join(args.output_dir, "balf_metanalysis")
+analysis_dir = os.path.join(args.output_dir, "blood_metanalysis")
 reports_dir = os.path.join(analysis_dir, "reports")  # Reports directory
 prepr_dir = os.path.join(analysis_dir, "preprocessed_data")  # Save processed .fastq files
 inputqiime_dir = os.path.join(analysis_dir, "qiime2_input_data")  # Input data directory
@@ -334,16 +338,6 @@ def decontam(batch):
 	"2>>", os.path.join(pipeline_reports, "3_decontam_iimportFeatureMat-report.log")])  # Output report
 	subprocess.run(importFeatureMat, shell=True)
 
-	# Exporting the decontam representative sequences 
-	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Decontam - Applying the decontamination results to the representative sequences: in progress ..')
-	exportReprSeqs = ' '.join([
-	f"{qiime2_env}/qiime feature-table filter-seqs",  # Calling qiime feature-table filter-seqs
-	"--i-data", f"{denoise_dir}/{batch}/representative_sequences.qza",  #  The sequences from which features should be filtered
-	"--i-table", f"{denoise_dir}/{batch}/decontam_filtered_table.qza",  # Table containing feature ids used for id-based filtering
-	"--o-filtered-data", f"{denoise_dir}/{batch}/representative_sequences_filt.qza",  # The resulting filtered sequences
-	"2>>", os.path.join(pipeline_reports, "4_decontam_exportReprSeqs-report.log")])  # Output report
-	subprocess.run(exportReprSeqs, shell=True)
-
 	# Removing all Negative Control samples from the analysis 
 	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Decontam - Removing the Negative Control samples from the analysis: in progress ..')
 	remove_negctrls = ' '.join([
@@ -353,10 +347,31 @@ def decontam(batch):
 	"--p-where", "\"[SampleType]='Negative control'\"",    # Removing samples indicated as 'Negative controls' in the metadata
 	"--p-exclude-ids",  # If true, the samples selected by 'metadata' or 'where' parameters will be excluded from the filtered table
 	"--o-filtered-table", f"{denoise_dir}/{batch}/decontam_filtered_table_noNegCtrls.qza",  # The resulting filtered table
-	"2>>", os.path.join(pipeline_reports, "5_decontam_exportReprSeqs-report.log")])  # Output report
+	"2>>", os.path.join(pipeline_reports, "4_decontam_exportReprSeqs-report.log")])  # Output report
 	subprocess.run(remove_negctrls, shell=True)
 
-	os.system('rm {0}/{1}/*sequences.qza {0}/{1}/*table.biom {0}/{1}/*table.tsv'.format(denoise_dir, batch))  # Removing unnecessary files
+	# Filtering out any features with less than X counts
+	min_frequency = min_freq(batch)
+	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Filtering out any features with less than {min_frequency} counts: in progress ..')
+	filter_feature_table = ' '.join([
+	f"{qiime2_env}/qiime feature-table filter-features",
+	"--p-min-frequency", min_frequency,  # Minimum frequency that a feature must have to be retained
+	"--i-table", f"{denoise_dir}/{batch}/decontam_filtered_table_noNegCtrls.qza",
+	"--o-filtered-table", f"{denoise_dir}/{batch}/decontam_filtered_table_noNegCtrls_noLowlyExprFeatures.qza",
+	"2>>", os.path.join(pipeline_reports, "5_decontam_filter_feature_table-report.log")])
+	subprocess.run(filter_feature_table, shell=True)
+
+	# Exporting the decontam representative sequences 
+	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Decontam - Applying the decontamination results to the representative sequences: in progress ..')
+	exportReprSeqs = ' '.join([
+	f"{qiime2_env}/qiime feature-table filter-seqs",  # Calling qiime feature-table filter-seqs
+	"--i-data", f"{denoise_dir}/{batch}/representative_sequences.qza",  #  The sequences from which features should be filtered
+	"--i-table", f"{denoise_dir}/{batch}/decontam_filtered_table_noNegCtrls_noLowlyExprFeatures.qza",  # Table containing feature ids used for id-based filtering
+	"--o-filtered-data", f"{denoise_dir}/{batch}/representative_sequences_filt_new.qza",  # The resulting filtered sequences
+	"2>>", os.path.join(pipeline_reports, "6_decontam_exportReprSeqs-report.log")])  # Output report
+	subprocess.run(exportReprSeqs, shell=True)
+
+	os.system('rm {0}/{1}/*table.biom {0}/{1}/*filtered_table.tsv {0}/{1}/*noNegCtrls.qza'.format(denoise_dir, batch))  # Removing unnecessary files
 	return
 
 def merge_denoised_data(batch_to_analyse):
@@ -364,7 +379,7 @@ def merge_denoised_data(batch_to_analyse):
 	sequences and feature tables """
 	if len(batch_to_analyse) > 1:
 		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Combining all {len(batch_to_analyse)} sets of data feature tables: in progress ..')
-		feature_tables = ' '.join(glob.glob(f'{denoise_dir}/*/decontam_filtered_table_noNegCtrls.qza'))
+		feature_tables = ' '.join(glob.glob(f'{denoise_dir}/*/decontam_filtered_table_noNegCtrls_noLowlyExprFeatures.qza'))
 		# Combine two sets of data feature tables
 		combFeatureTable =	' '.join([
 		f"{qiime2_env}/qiime feature-table merge",  # Calling qiime feature-table merge
@@ -374,29 +389,18 @@ def merge_denoised_data(batch_to_analyse):
 		subprocess.run(combFeatureTable, shell=True)
 
 		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Combining the representative sequences of all {len(batch_to_analyse)} sets of data: in progress ..')
-		sequence_tables = ' '.join(glob.glob(f'{denoise_dir}/*/representative_sequences_filt.qza'))
+		sequence_tables = ' '.join(glob.glob(f'{denoise_dir}/*/representative_sequences_filt_new.qza'))
 		# Combine the representative sequences of the two sets of data
 		combSeqsTable =	' '.join([
 		f"{qiime2_env}/qiime feature-table merge-seqs",  # Calling qiime feature-table merge-seqs
 		"--i-data", sequence_tables,  # Representative sequences to be merged
 		"--o-merged-data", f"{denoise_dir}/representative_sequences.qza",  # Output reports
-		"2>>", os.path.join(pipeline_reports, "2_qiime2_combSeqsTable-report.log")])  # Output importSamplesQC report
-		subprocess.run(combSeqsTable, shell=True)
-
-		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Feature table summary of the filtered tables and sequences: in progress ..')
-		featureTableSummary = ' '.join([
-		f"{qiime2_env}/qiime feature-table summarize",  # Calling qiime2 feature-table summarize function
-		"--m-sample-metadata-file", args.metadata,  # Metadata file
-		"--quiet",  # Silence output if execution is successful
-		"--i-table", f"{denoise_dir}/table.qza",  # The feature table to be summarized
-		"--o-visualization", f"{denoise_dir}/feature_table.qzv",  # Output results to directory
-		"2>>", os.path.join(pipeline_reports, "3_qiime2_featureTableSummary-report.log")])  # Output featureTableSummary report
-		subprocess.run(featureTableSummary, shell=True)
-		export(f"{denoise_dir}/feature_table.qzv")
+		"2>>", os.path.join(pipeline_reports, "2_merge_combSeqsTable-report.log")])  # Output importSamplesQC report
+		subprocess.run(combSeqsTable, shell=True)		
 	else:
-		os.system(f'mv {denoise_dir}/*/decontam_filtered_table.qza {denoise_dir}/table.qza')  # Moving table.qza to the denoising directory
-		os.system(f'mv {denoise_dir}/*/representative_sequences_filt.qza {denoise_dir}/representative_sequences.qza')  # Moving representative_sequences.qza to the denoising directory
-		os.system(f'mv -r {denoise_dir}/*/feature_table {denoise_dir}')  # Moving feature_table stats to the denoising directory
+		subprocess.run(f'mv {denoise_dir}/*/decontam_filtered_table_noNegCtrls_noLowlyExprFeatures.qza {denoise_dir}/table.qza', shell=True)  # Moving table.qza to the denoising directory
+		subprocess.run(f'mv {denoise_dir}/*/representative_sequences_filt_new.qza {denoise_dir}/representative_sequences.qza', shell=True)  # Moving representative_sequences.qza to the denoising directory
+		subprocess.run(f'mv {denoise_dir}/*/feature_table {denoise_dir}', shell=True)  # Moving feature_table stats to the denoising directory
 	return
 
 def taxonomic_assignmnet():
@@ -423,8 +427,7 @@ def taxonomic_assignmnet():
 		"--p-r-primer", args.reversePrimer,  # Reverse primer sequence
 		"--i-sequences", silva_reference,  # Input reference seq artifact
 		"--o-reads", silva_reference_targeted,  # Output ref sequencing-like reads
-		# "2>>", os.path.join(pipeline_reports, "1_taxonomyNB_extractRefReads-report.log")
-		])  # Output extractRefReads report
+		"2>>", os.path.join(pipeline_reports, "1_taxonomyNB_extractRefReads-report.log")])  # Output extractRefReads report
 		subprocess.run(extractRefReads, shell=True)
 
 		""" We can now train a Naive Bayes classifier as follows, using 
@@ -436,59 +439,46 @@ def taxonomic_assignmnet():
 		"--i-reference-reads", silva_reference_targeted,
 		"--i-reference-taxonomy", silva_taxonomy,
 		"--o-classifier", silva_99_classifier, 
-		# "2>>", os.path.join(pipeline_reports, "2_taxonomyNB_trainClassifier-report.log")
-		])  # Output trainClassifier report
+		"2>>", os.path.join(pipeline_reports, "2_taxonomyNB_trainClassifier-report.log")])  # Output trainClassifier report
 		subprocess.run(trainClassifier, shell=True)
-		# export(os.path.join(taxonomy_dir, "classifier.qza"))
 		
 	
-	# """ Assign the taxonomy """
-	# print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Assigning the taxonomy to each ASV: in progress ..')
-	# assignTaxonomy = ' '.join([
-	# f"{qiime2_env}/qiime feature-classifier classify-sklearn",
-	# "--quiet",  # Silence output if execution is successful
-	# "--p-n-jobs", args.threads,  # Number of threads to use
-	# "--i-classifier", silva_99_classifier,  # Using Silva classifier
-	# "--i-reads", os.path.join(denoise_dir, "representative_sequences.qza"),  # The output sequences
-	# "--o-classification", os.path.join(taxonomy_dir, "taxonomic_classification.qza"),
-	# "2>>", os.path.join(pipeline_reports, "1_taxonomy_assignTaxonomy-report.log")])  # Output assignTaxonomy report
-	# subprocess.run(assignTaxonomy, shell=True)
+	""" Assign the taxonomy """
+	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Assigning the taxonomy to each ASV: in progress ..')
+	assignTaxonomy = ' '.join([
+	f"{qiime2_env}/qiime feature-classifier classify-sklearn",
+	"--quiet",  # Silence output if execution is successful
+	"--p-n-jobs", args.threads,  # Number of threads to use
+	"--i-classifier", silva_99_classifier,  # Using Silva classifier
+	"--i-reads", os.path.join(denoise_dir, "representative_sequences.qza"),  # The output sequences
+	"--o-classification", os.path.join(taxonomy_dir, "taxonomic_classification.qza"),
+	"2>>", os.path.join(pipeline_reports, "1_taxonomy_assignTaxonomy-report.log")])  # Output assignTaxonomy report
+	subprocess.run(assignTaxonomy, shell=True)
 
-	# outputClassifications = ' '.join([
-	# f"{qiime2_env}/qiime metadata tabulate",
-	# "--quiet",  # Silence output if execution is successful
-	# "--m-input-file", os.path.join(taxonomy_dir, "taxonomic_classification.qza"),
-	# "--o-visualization", os.path.join(taxonomy_dir, "taxonomic_classification.qzv"),
-	# "2>>", os.path.join(pipeline_reports, "2_taxonomy_outputClassifications-report.log")])  # Output outputClassifications report
-	# subprocess.run(outputClassifications, shell=True)
-	# export(os.path.join(taxonomy_dir, "taxonomic_classification.qzv"))
+	outputClassifications = ' '.join([
+	f"{qiime2_env}/qiime metadata tabulate",
+	"--quiet",  # Silence output if execution is successful
+	"--m-input-file", os.path.join(taxonomy_dir, "taxonomic_classification.qza"),
+	"--o-visualization", os.path.join(taxonomy_dir, "taxonomic_classification.qzv"),
+	"2>>", os.path.join(pipeline_reports, "2_taxonomy_outputClassifications-report.log")])  # Output outputClassifications report
+	subprocess.run(outputClassifications, shell=True)
+	export(os.path.join(taxonomy_dir, "taxonomic_classification.qzv"))
 
-	# print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Generating the taxonomic barplot: in progress ..')
-	# barplotOfTaxonomy = ' '.join([
-	# f"{qiime2_env}/qiime taxa barplot", 
-	# "--quiet",  # Silence output if execution is successful
-	# "--i-table", os.path.join(denoise_dir, "table.qza"),
-	# "--i-taxonomy", os.path.join(taxonomy_dir, "taxonomic_classification.qza"),
-	# "--m-metadata-file", args.metadata,  # Metadata file
-	# "--o-visualization", os.path.join(taxonomy_dir, "taxonomy_barplot.qzv"),
-	# "2>>", os.path.join(pipeline_reports, "3_taxonomy_barplotOfTaxonomy-report.log")])  # Output barplotOfTaxonomy report
-	# subprocess.run(barplotOfTaxonomy, shell=True)
-	# export(os.path.join(taxonomy_dir, "taxonomy_barplot.qzv"))
-
-	# # Filtering out any features with less than X counts
-	# min_frequency = min_freq()
-	# print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Filtering out any features with less than {min_frequency} counts: in progress ..')
-	# filter_feature_table = ' '.join([
-	# f"{qiime2_env}/qiime feature-table filter-features",
-	# "--p-min-frequency", min_frequency,  # Minimum frequency that a feature must have to be retained
-	# "--i-table", os.path.join(denoise_dir, "table.qza"),
-	# "--o-filtered-table", os.path.join(denoise_dir, "table_filtered.qza"),
-	# "2>>", os.path.join(pipeline_reports, "4_taxonomy_filter_feature_table-report.log")])
-	# subprocess.run(filter_feature_table, shell=True)
+	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Generating the taxonomic barplot: in progress ..')
+	barplotOfTaxonomy = ' '.join([
+	f"{qiime2_env}/qiime taxa barplot", 
+	"--quiet",  # Silence output if execution is successful
+	"--i-table", os.path.join(denoise_dir, "table.qza"),
+	"--i-taxonomy", os.path.join(taxonomy_dir, "taxonomic_classification.qza"),
+	"--m-metadata-file", args.metadata,  # Metadata file
+	"--o-visualization", os.path.join(taxonomy_dir, "taxonomy_barplot.qzv"),
+	"2>>", os.path.join(pipeline_reports, "3_taxonomy_barplotOfTaxonomy-report.log")])  # Output barplotOfTaxonomy report
+	subprocess.run(barplotOfTaxonomy, shell=True)
+	export(os.path.join(taxonomy_dir, "taxonomy_barplot.qzv"))
 	return
 
 class phylogenetics():
-	def __init__(self, threads, metadata):
+	def __init__(self):
 		""" This pipeline will start by creating a sequence alignment using MAFFT,
 	  	after which any alignment columns that are phylogenetically uninformative
 	  	or  ambiguously aligned  will be removed  (masked). The resulting masked
@@ -566,7 +556,7 @@ class phylogenetics():
 		(X is a placeholder for the lowest reasonable sample depth; samples with depth below this cut-off will be excluded) """
 		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")} Calculate multiple diversity metrics: in progress ..')
 		diversityMetrics =	' '.join([
-		f"{qiime2_env}/qiime diversity core-metrics-phylogenetic",  # Calling qiime 2diversity core-metrics-phylogenetic function
+		f"{qiime2_env}/qiime diversity core-metrics-phylogenetic",  # Calling qiime2 diversity core-metrics-phylogenetic function
 		"--m-metadata-file", args.metadata,  # Metadata file
 		"--quiet",  # Silence output if execution is successful
 		"--p-n-jobs", args.threads, # The number of CPUs to be used for the computation
@@ -633,10 +623,10 @@ def calculateMinMax(forwardRead):
 	max_readLength = (read_length * 2) - (primers_averageLength * 2)
 	return (min_readLength, max_readLength)
 
-def min_freq():
+def min_freq(batch):
 	""" Based on the summary we will calculate a cut-off for how frequent a variant needs to be for it to be retained. 
-	We will remove all ASVs that have a frequency of less than 0.0001% of the mean sample depth. This cut-off excludes """
-	exportFile = os.path.join(denoise_dir, "feature_table.qzv")
+	We will remove all ASVs that have a frequency of less than 0.001% of the mean sample depth. This cut-off excludes """
+	exportFile = f"{denoise_dir}/{batch}/feature_table.qzv"
 	if not os.path.exists(exportFile[:-4]):
 		subprocess.run(f"{qiime2_env}/qiime tools export --input-path {exportFile} --output-path {exportFile[:-4]}", shell=True)
 
@@ -650,10 +640,10 @@ def min_freq():
 					for line in fin:
 						samples += 1
 						mean_freq += float(line.split(",")[1])
-				mean_freq = mean_freq/samples
+				mean_freq = mean_freq/(samples-1)
 
 	# Calculation of the cut-off point
-	cut_off = str(int(mean_freq * 0.0001))
+	cut_off = str(int(mean_freq * 0.001))
 	return cut_off
 
 def export(exportFile):
@@ -719,9 +709,9 @@ def main():
 	
 	# merge_denoised_data(batch_to_analyse)
 
-	taxonomic_assignmnet()
+	# taxonomic_assignmnet()
 
-	# phylogenetics()
+	phylogenetics()
 
 	# downstream_analysis()
 
