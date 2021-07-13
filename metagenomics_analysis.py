@@ -1,4 +1,4 @@
-###Stavros Giannoukakos###
+ ###Stavros Giannoukakos###
 ##University of Granada##
 
 #Version of the program
@@ -7,24 +7,20 @@ __version__ = "0.2.0"
 import argparse
 import operator
 from Bio import SeqIO
-import subprocess, gzip
 from Bio.Seq import Seq
+import subprocess, gzip
 from datetime import datetime
 import shutil, fnmatch, glob, sys, os
 
-########### TEST ############
-# batch_to_analyse = ["batch1",  "batch16"]
-# inputDir = '/shared/projects/martyna_rrna_illumina_igtp/test_data'
-# metadata_file = "/shared/projects/martyna_rrna_illumina_igtp/test_data/clinical_data.txt"
-#############################
 
-batch_to_analyse = ["batch1"]
-inputDir = '/shared/projects/martyna_rrna_illumina_igtp/blood_microbiome'
-metadata_file = "/shared/projects/martyna_rrna_illumina_igtp/blood_microbiome/clinical_data.txt"
 
-# batch_to_analyse = ["batch2",  "batch3", "batch4"]
-# inputDir = '/shared/projects/martyna_rrna_illumina_igtp/balf_microbiome'
-# metadata_file = "/shared/projects/martyna_rrna_illumina_igtp/balf_microbiome/clinical_data.txt"
+# batch_to_analyse = ["batch1"]
+# inputDir = '/shared/projects/martyna_rrna_illumina_igtp/blood_microbiome'
+# metadata_file = "/shared/projects/martyna_rrna_illumina_igtp/blood_microbiome/clinical_data.txt"
+
+batch_to_analyse = ["batch2",  "batch3", "batch4", "batch5"]
+inputDir = '/shared/projects/martyna_rrna_illumina_igtp/balf_microbiome'
+metadata_file = "/shared/projects/martyna_rrna_illumina_igtp/balf_microbiome/clinical_data.txt"
 
 rscripts = f"{os.path.dirname(os.path.realpath(__file__))}/Ranalysis"
 # Calling Qiime2 tools from its conda environment
@@ -50,7 +46,7 @@ requiredArgs = parser.add_argument_group('required arguments')
 requiredArgs.add_argument('-i', '--input_dir', dest='input_dir', metavar='', required=False,
 						   help="Path of the input directory that contains the raw data.\nBoth forward and reverse reads are expected to be found\nin this directory.")
 # Number of threads/CPUs to be used
-parser.add_argument('-th', '--threads', dest='threads', default=str(45), metavar='', 
+parser.add_argument('-th', '--threads', dest='threads', default=str(70), metavar='', 
                 	help="Number of threads to be used in the analysis")
 # Number of threads/CPUs to be used
 parser.add_argument('-fp', '--forwardPrimer', dest='forwardPrimer', default="CCTACGGGNGGCWGCAG", metavar='', required=False, 
@@ -78,7 +74,8 @@ args.metadata = metadata_file
 args.input_dir = inputDir
 
 # Main directories hosting the analysis
-analysis_dir = os.path.join(args.output_dir, "blood_metanalysis")
+# analysis_dir = os.path.join(args.output_dir, "blood_metanalysis")
+analysis_dir = os.path.join(args.output_dir, "balf_metanalysis")
 reports_dir = os.path.join(analysis_dir, "reports")  # Reports directory
 prepr_dir = os.path.join(analysis_dir, "preprocessed_data")  # Save processed .fastq files
 inputqiime_dir = os.path.join(analysis_dir, "qiime2_input_data")  # Input data directory
@@ -87,6 +84,7 @@ taxonomy_dir = os.path.join(analysis_dir, "taxonomic_analysis")  # Taxonomic ana
 krona_dir = os.path.join(analysis_dir, "taxonomic_analysis/krona_visualisation")  # Krona taxonomy visual
 diversity_dir = os.path.join(analysis_dir, "diversity_analysis")  # Diversity analysis
 random_forest_dir = os.path.join(analysis_dir, "random_forest")
+downstream_dir = os.path.join(analysis_dir, "downstream_analysis")
 # Reporting directories
 qc_reports = os.path.join(analysis_dir, "reports/QC_reports")
 pipeline_reports = os.path.join(analysis_dir, "reports/pipeline_reports")
@@ -252,7 +250,7 @@ def denoising(batch):
 	"--input-format", "CasavaOneEightSingleLanePerSampleDirFmt",
 	"--input-path", f"{prepr_dir}/{batch}",  # Path to the directory that should be imported
 	"--output-path", f"{inputqiime_dir}/input_data_{batch}.qza",  # Path where output artifact should be written
-	"2>>", os.path.join(pipeline_reports, "1_denoising_importingSamplesToQiime2-report.log")])  # Output denoising report
+	"2>>", os.path.join(pipeline_reports, "denoising1_importingSamplesToQiime2-report.log")])  # Output denoising report
 	subprocess.run(importingSamplesToQiime2, shell=True)
 
 	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Generating interactive positional quality plots: in progress ..')
@@ -261,7 +259,7 @@ def denoising(batch):
 	"--quiet",  # Silence output if execution is successful
 	"--i-data", f"{inputqiime_dir}/input_data_{batch}.qza",  # Path where the input artifact is written
 	"--o-visualization", f"{inputqiime_dir}/{batch}_data_QC.qzv",  # Output reports
-	"2>>", os.path.join(pipeline_reports, "2_denoising_importSamplesQC-report.log")])  # Output importSamplesQC report
+	"2>>", os.path.join(pipeline_reports, "denoising2_importSamplesQC-report.log")])  # Output importSamplesQC report
 	subprocess.run(importSamplesQC, shell=True)
 	export(f"{inputqiime_dir}/{batch}_data_QC.qzv")
 
@@ -276,17 +274,17 @@ def denoising(batch):
 	"--p-trunc-len-r", "0",  # No truncation will be performed cause we have already trimmed low quality ends
 	"--output-dir", f"{denoise_dir}/{batch}",  # Output results to a directory
 	"--i-demultiplexed-seqs", f"{inputqiime_dir}/input_data_{batch}.qza",  # The paired-end demultiplexed sequences to be denoised
-	"2>>", os.path.join(pipeline_reports, "3_denoising_dada2-report.log")])  # Output denoising report
+	"2>>", os.path.join(pipeline_reports, "denoising3_dada2-report.log")])  # Output denoising report
 	subprocess.run(dada2, shell=True)
 
 	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Feature table summary: in progress ..')
 	featureTableSummary = ' '.join([
 	f"{qiime2_env}/qiime feature-table summarize",  # Calling qiime2 feature-table summarize function
-	"--m-sample-metadata-file", args.metadata,  # Metadata file
 	"--quiet",  # Silence output if execution is successful
 	"--i-table", f"{denoise_dir}/{batch}/table.qza",  # The feature table to be summarized
+	"--m-sample-metadata-file", args.metadata,  # Metadata file
 	"--o-visualization", f"{denoise_dir}/{batch}/feature_table.qzv",  # Output results to directory
-	"2>>", os.path.join(pipeline_reports, "4_denoising_featureTableSummary-report.log")])  # Output featureTableSummary report
+	"2>>", os.path.join(pipeline_reports, "denoising4_featureTableSummary-report.log")])  # Output featureTableSummary report
 	subprocess.run(featureTableSummary, shell=True)
 	export(f"{denoise_dir}/{batch}/feature_table.qzv")
 
@@ -295,7 +293,7 @@ def denoising(batch):
 	f"{qiime2_env}/qiime metadata tabulate",  # Calling qiime2 metadata tabulate
 	"--m-input-file", f"{denoise_dir}/{batch}/denoising_stats.qza",  # Input stats file
 	"--o-visualization", f"{denoise_dir}/{batch}/denoising_stats.qzv",  # Output results to directory
-	"2>>", os.path.join(pipeline_reports, "5_denoising_denoisingStats-report.log")])  # Output report
+	"2>>", os.path.join(pipeline_reports, "denoising5_denoisingStats-report.log")])  # Output report
 	subprocess.run(denoisingStats, shell=True)
 	export(f"{denoise_dir}/{batch}/denoising_stats.qzv")
 	return 
@@ -368,7 +366,7 @@ def decontam(batch):
 	"--i-data", f"{denoise_dir}/{batch}/representative_sequences.qza",  #  The sequences from which features should be filtered
 	"--i-table", f"{denoise_dir}/{batch}/decontam_filtered_table_noNegCtrls_noLowlyExprFeatures.qza",  # Table containing feature ids used for id-based filtering
 	"--o-filtered-data", f"{denoise_dir}/{batch}/representative_sequences_filt_new.qza",  # The resulting filtered sequences
-	"2>>", os.path.join(pipeline_reports, "6_decontam_exportReprSeqs-report.log")])  # Output report
+	"2>>", os.path.join(pipeline_reports, "decontam6_exportReprSeqs-report.log")])  # Output report
 	subprocess.run(exportReprSeqs, shell=True)
 
 	os.system('rm {0}/{1}/*table.biom {0}/{1}/*filtered_table.tsv {0}/{1}/*noNegCtrls.qza'.format(denoise_dir, batch))  # Removing unnecessary files
@@ -385,7 +383,7 @@ def merge_denoised_data(batch_to_analyse):
 		f"{qiime2_env}/qiime feature-table merge",  # Calling qiime feature-table merge
 		"--i-tables", feature_tables,  # Feature tables to be merged
 		"--o-merged-table", f"{denoise_dir}/table.qza",  # Output reports
-		"2>>", os.path.join(pipeline_reports, "1_merge_combFeatureTable-report.log")])  # Output importSamplesQC report
+		"2>>", os.path.join(pipeline_reports, "1_merge1_combFeatureTable-report.log")])  # Output importSamplesQC report
 		subprocess.run(combFeatureTable, shell=True)
 
 		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Combining the representative sequences of all {len(batch_to_analyse)} sets of data: in progress ..')
@@ -395,12 +393,23 @@ def merge_denoised_data(batch_to_analyse):
 		f"{qiime2_env}/qiime feature-table merge-seqs",  # Calling qiime feature-table merge-seqs
 		"--i-data", sequence_tables,  # Representative sequences to be merged
 		"--o-merged-data", f"{denoise_dir}/representative_sequences.qza",  # Output reports
-		"2>>", os.path.join(pipeline_reports, "2_merge_combSeqsTable-report.log")])  # Output importSamplesQC report
+		"2>>", os.path.join(pipeline_reports, "2_merge2_combSeqsTable-report.log")])  # Output importSamplesQC report
 		subprocess.run(combSeqsTable, shell=True)		
 	else:
 		subprocess.run(f'mv {denoise_dir}/*/decontam_filtered_table_noNegCtrls_noLowlyExprFeatures.qza {denoise_dir}/table.qza', shell=True)  # Moving table.qza to the denoising directory
 		subprocess.run(f'mv {denoise_dir}/*/representative_sequences_filt_new.qza {denoise_dir}/representative_sequences.qza', shell=True)  # Moving representative_sequences.qza to the denoising directory
-		subprocess.run(f'mv {denoise_dir}/*/feature_table {denoise_dir}', shell=True)  # Moving feature_table stats to the denoising directory
+
+	
+	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Final feature table summary: in progress ..')
+	finfeatureTableSummary = ' '.join([
+	f"{qiime2_env}/qiime feature-table summarize",  # Calling qiime2 feature-table summarize function
+	"--quiet",  # Silence output if execution is successful
+	"--i-table", f"{denoise_dir}/table.qza",  # The feature table to be summarized
+	"--m-sample-metadata-file", args.metadata,  # Metadata file
+	"--o-visualization", f"{denoise_dir}/feature_table.qzv",  # Output results to directory
+	"2>>", os.path.join(pipeline_reports, "3_merge_finfeatureTableSummary-report.log")])  # Output featureTableSummary report
+	subprocess.run(finfeatureTableSummary, shell=True)
+	export(f"{denoise_dir}/feature_table.qzv")
 	return
 
 def taxonomic_assignmnet():
@@ -501,18 +510,13 @@ class phylogenetics():
 		with open(depth_file) as fin:
 			for line in fin:
 				depths[line.split(",")[0].strip()] = int(float(line.split(",")[1].strip()))
-		
+
 		# Ordering dictionary by decreasing value
 		depths = sorted(depths.items(), key = operator.itemgetter(1), reverse = True)
-		if "neg" in depths[-1][0].lower():
-			if "neg" in depths[-2][0].lower():
-				min_depth = depths[-3][1]
-			else:
-				min_depth = depths[-2][1]
+		if depths[-1][1] == 0:
+			min_depth = str(depths[-2][1])
 		else:
-			min_depth = depths[-1][1]
-		
-		min_depth = str(depths[-1][1])
+			min_depth = str(depths[-1][1])
 		return min_depth
 
 	def phylogenetic_tree(self):
@@ -557,12 +561,12 @@ class phylogenetics():
 		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")} Calculate multiple diversity metrics: in progress ..')
 		diversityMetrics =	' '.join([
 		f"{qiime2_env}/qiime diversity core-metrics-phylogenetic",  # Calling qiime2 diversity core-metrics-phylogenetic function
-		"--m-metadata-file", args.metadata,  # Metadata file
 		"--quiet",  # Silence output if execution is successful
-		"--p-n-jobs", args.threads, # The number of CPUs to be used for the computation
-		"--i-phylogeny", os.path.join(diversity_dir, "rooted_tree.qza"),  # The rooted phylogenetic tree
 		"--i-table", os.path.join(denoise_dir, "table.qza"),  # The input feature table
+		"--i-phylogeny", os.path.join(diversity_dir, "rooted_tree.qza"),  # The rooted phylogenetic tree
 		"--p-sampling-depth", self.max_depth_threshold(),  # The total frequency that each sample should be rarefied to prior to computing diversity metrics
+		"--m-metadata-file", args.metadata,  # Metadata file
+		"--p-n-jobs-or-threads", args.threads, # The number of CPUs to be used for the computation
 		"--output-dir", os.path.join(diversity_dir, "core_metrics_results"),  # Output directory that will host the core metrics
 		"2>>", os.path.join(pipeline_reports, "4_phylogenetics_diversityMetrics-report.log")])  # Output diversityMetrics report
 		subprocess.run(diversityMetrics, shell=True)
@@ -571,6 +575,31 @@ class phylogenetics():
 
 def downstream_analysis():
 	
+	if "balf" in args.input_dir:
+		downstream_rscript = os.path.join(rscripts, "downstream_analysis_balf.R")
+		accepted_protocol = "standard"
+	elif "blood" in args.input_dir:
+		downstream_rscript = os.path.join(rscripts, "downstream_analysis_blood.R")
+		accepted_protocol = "beads"
+
+
+	if not os.path.exists(downstream_dir): os.makedirs(downstream_dir)
+
+	# Running downstream analysis
+	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Downstream - Running additional downstream analysis on R: in progress ..')
+	danalysis = " ".join([
+	"Rscript",  # Call Rscript
+	downstream_rscript,  # Calling the necessary R script
+	f"{denoise_dir}/table.qza",  # The input feature table
+	f"{taxonomy_dir}/taxonomic_classification.qza",  # Input taxonomic classification
+	f"{diversity_dir}/rooted_tree.qza",  #  Input phylogenetic rooted tree
+	args.metadata,  # Metadata file
+	downstream_dir,  # Output dir
+	"nonCancer,cancer",  # Groups for Differential Abundance Testing
+	accepted_protocol,  # Accepted protocol
+	args,threads,  # Number of cores to use
+	"2>>", os.path.join(pipeline_reports, "downstream_analysis-report.txt")])  # Directory where all reports reside
+	subprocess.run(danalysis, shell=True)
 	return
 
 def ml_approach():
@@ -697,26 +726,25 @@ def main():
 		print(f'- In total {len(R1list)} samples will be processed from {batch}..')
 		
 		
-		# quality_control(batch, R1list)  # Checking the quality of the reads
+		quality_control(batch, R1list)  # Checking the quality of the reads
 
-		# ## Preprocessing of the input data
-		# primer_removal(batch, pairedReads)  # Performing quality trimming and removal of all primers on both reads
+		## Preprocessing of the input data
+		primer_removal(batch, pairedReads)  # Performing quality trimming and removal of all primers on both reads
 		
-		# ## Qiime2 analysis - denoising
-		# denoising(batch)
+		denoising(batch)  # Qiime2 analysis - denoising
 
-		# decontam(batch)  # Performing decontamination
+		decontam(batch)  # Performing decontamination
 	
-	# merge_denoised_data(batch_to_analyse)
+	merge_denoised_data(batch_to_analyse)
 
-	# taxonomic_assignmnet()
+	taxonomic_assignmnet()
 
 	phylogenetics()
 
-	# downstream_analysis()
+	downstream_analysis()
 
 	# ml_approach()
 
-	# summarisation()
+	summarisation()
 
 if __name__ == "__main__": main()
