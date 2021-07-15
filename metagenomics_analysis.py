@@ -14,7 +14,7 @@ import shutil, fnmatch, glob, sys, os
 
 
 
-# batch_to_analyse = ["batch1"]
+# batch_to_analyse = ["batch1", "batch2"]
 # inputDir = '/shared/projects/martyna_rrna_illumina_igtp/blood_microbiome'
 # metadata_file = "/shared/projects/martyna_rrna_illumina_igtp/blood_microbiome/clinical_data.txt"
 
@@ -31,7 +31,8 @@ fastQscreen_config = "/home/stavros/references/fastQscreen_references/fastq_scre
 silva_taxonomy = "/home/stavros/references/metagenomics_dbs/SILVA/silva-138-99-tax.qza"
 silva_reference = "/home/stavros/references/metagenomics_dbs/SILVA/silva-138-99-seqs.qza"
 silva_reference_targeted = "/home/stavros/references/metagenomics_dbs/SILVA/silva-138-99-seqs_targeted.qza"
-silva_99_classifier = "/home/stavros/references/metagenomics_dbs/SILVA/silva_138_99_v3v4_scikitv0.23.1.qza"  # scikit-learn version 0.23.1.
+# silva_99_classifier = "/home/stavros/references/metagenomics_dbs/SILVA/silva_138_99_v3v4_scikitv0.23.1.qza"  # scikit-learn version 0.23.1.
+silva_99_classifier = "/home/stavros/references/metagenomics_dbs/SILVA/silva_138_99_v3v4_scikitv0.24.2.qza"  # scikit-learn version 0.24.2
 
 
 
@@ -133,7 +134,7 @@ def quality_control(batch, R1list):
 	"--quiet",  # Suppress all progress reports on stderr and only report errors
 	"--conf", fastQscreen_config,  # Location of the required configuration file
 	mfiltered_data, mfiltered_data.replace("_R1_", "_R2_"),  # Input PE files
-	"2>>", os.path.join(pipeline_reports, "1_preprocessing_fastQscreen-report.log")])  # Output fastQ screen report
+	"2>>", os.path.join(pipeline_reports, "preprocessing1_fastQscreen-report.log")])  # Output fastQ screen report
 	subprocess.run(fastQscreen, shell=True)
 
 	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  2|4 FastQC - Quality Control reports for the forward reads are being generated: in progress ..')
@@ -143,7 +144,7 @@ def quality_control(batch, R1list):
 	"--quiet",  # Print only log warnings
 	"--outdir", prepr_qc_reports,  # Create all output files in this specified output directory
 	mfiltered_data, mfiltered_data.replace("_R1_", "_R2_"),  # String containing all samples that are about to be checked
-	"2>>", os.path.join(pipeline_reports, "2_preprocessing_fastQC_frw-report.log")])  # Output fastQC report
+	"2>>", os.path.join(pipeline_reports, "preprocessing2_fastQC_frw-report.log")])  # Output fastQC report
 	subprocess.run(fastQC_frw, shell=True)
 
 	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  3|4 FastP - Quality Control reports for the input reads are being generated: in progress ..')
@@ -159,7 +160,7 @@ def quality_control(batch, R1list):
 		"--overrepresentation_analysis",  # Enable overrepresented sequence analysis
 		"--html", f"{prepr_qc_reports}/{os.path.basename(files)[:-9]}_fastp.html",  # Create HTML file in this specified output directory
 		"--json", f"{prepr_qc_reports}/{os.path.basename(files)[:-9]}_fastp.json",  # Create json output file in this specified output directory
-		"2>>", os.path.join(pipeline_reports, "3_preprocessing_fastP-report.log")])  # Output fastP report
+		"2>>", os.path.join(pipeline_reports, "preprocessing3_fastP-report.log")])  # Output fastP report
 		subprocess.run(fastP, shell=True) 
 
 	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  4|4 MultiQC - Summarised Quality Control report for all the input reads is being generated: in progress ..')
@@ -169,7 +170,7 @@ def quality_control(batch, R1list):
 	"--outdir", prepr_qc_reports,  # Create report in the FastQC reports directory
 	"--filename", f"summarised_report_{batch}",  # Name of the output report 
 	prepr_qc_reports,  # Directory where all FastQC and FastP reports reside
-	"2>>", os.path.join(pipeline_reports, "4_preprocessing_multiQC-report.log")])  # Output multiQC report
+	"2>>", os.path.join(pipeline_reports, "preprocessing4_multiQC-report.log")])  # Output multiQC report
 	subprocess.run(multiQC, shell=True)
 
 
@@ -229,8 +230,8 @@ def primer_removal(batch, pairedReads):
 		"maq=15",  # Reads with average quality (after trimming) below this will be discarded (15)
 		"mm=f",  # Looking for exact kmers and not mask the middle bases
 		"k=10",  # Setting the kmer size we want to search for
-		"2>>", os.path.join(pipeline_reports, "removepr_bbduk-report.log")])  # Output trimming report
-		print("\n\n", file=open(os.path.join(pipeline_reports, "removepr_bbduk-report.log"),"a"))
+		"2>>", os.path.join(pipeline_reports, "removeprimers_bbduk-report.log")])  # Output trimming report
+		print("\n\n", file=open(os.path.join(pipeline_reports, "removeprimers_bbduk-report.log"),"a"))
 		subprocess.run(bbduk, shell=True)
 	return 
 
@@ -314,16 +315,16 @@ def decontam(batch):
 	f"{denoise_dir}/{batch}/table.qza",  # Input feature matrix
 	args.metadata,  # Input metadata
 	f"{denoise_dir}/{batch}",  # Output directory
-	"2>>", os.path.join(pipeline_reports, "1_decontam_decontam-report.txt")])  # Directory where all reports reside
+	"2>>", os.path.join(pipeline_reports, "decontam1_decontam-report.txt")])  # Directory where all reports reside
 	subprocess.run(decontam, shell=True)
-
+	
 	# Converting the .tsv to .biom
 	biomconvert = ' '.join([
 	"biom convert",  # Calling biom convert
 	"--input-fp", f"{denoise_dir}/{batch}/decontam_filtered_table.tsv",  # The input BIOM table
 	"--output-fp", f"{denoise_dir}/{batch}/decontam_filtered_table.biom",
 	"--to-hdf5",  # Output to hdf5 format
-	"2>>", os.path.join(pipeline_reports, "2_decontam_biomconvert-report.log")])  # Output report
+	"2>>", os.path.join(pipeline_reports, "decontam2_biomconvert-report.log")])  # Output report
 	subprocess.run(biomconvert, shell=True)
 	
 	# Importing the decontam feature matrix
@@ -333,9 +334,9 @@ def decontam(batch):
 	"--input-path", f"{denoise_dir}/{batch}/decontam_filtered_table.biom",  # Path to representative_sequences.qza file that should be exported
 	"--output-path", f"{denoise_dir}/{batch}/decontam_filtered_table.qza",  # Output reports
 	"--type \'FeatureTable[Frequency]\'",  # Output 
-	"2>>", os.path.join(pipeline_reports, "3_decontam_iimportFeatureMat-report.log")])  # Output report
+	"2>>", os.path.join(pipeline_reports, "decontam3_iimportFeatureMat-report.log")])  # Output report
 	subprocess.run(importFeatureMat, shell=True)
-
+	
 	# Removing all Negative Control samples from the analysis 
 	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Decontam - Removing the Negative Control samples from the analysis: in progress ..')
 	remove_negctrls = ' '.join([
@@ -345,18 +346,18 @@ def decontam(batch):
 	"--p-where", "\"[SampleType]='Negative control'\"",    # Removing samples indicated as 'Negative controls' in the metadata
 	"--p-exclude-ids",  # If true, the samples selected by 'metadata' or 'where' parameters will be excluded from the filtered table
 	"--o-filtered-table", f"{denoise_dir}/{batch}/decontam_filtered_table_noNegCtrls.qza",  # The resulting filtered table
-	"2>>", os.path.join(pipeline_reports, "4_decontam_exportReprSeqs-report.log")])  # Output report
+	"2>>", os.path.join(pipeline_reports, "decontam4_exportReprSeqs-report.log")])  # Output report
 	subprocess.run(remove_negctrls, shell=True)
-
+	
 	# Filtering out any features with less than X counts
 	min_frequency = min_freq(batch)
-	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Filtering out any features with less than {min_frequency} counts: in progress ..')
+	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Decontam - Filtering out any features with less than {min_frequency} counts: in progress ..')
 	filter_feature_table = ' '.join([
 	f"{qiime2_env}/qiime feature-table filter-features",
 	"--p-min-frequency", min_frequency,  # Minimum frequency that a feature must have to be retained
 	"--i-table", f"{denoise_dir}/{batch}/decontam_filtered_table_noNegCtrls.qza",
 	"--o-filtered-table", f"{denoise_dir}/{batch}/decontam_filtered_table_noNegCtrls_noLowlyExprFeatures.qza",
-	"2>>", os.path.join(pipeline_reports, "5_decontam_filter_feature_table-report.log")])
+	"2>>", os.path.join(pipeline_reports, "decontam5_filter_feature_table-report.log")])
 	subprocess.run(filter_feature_table, shell=True)
 
 	# Exporting the decontam representative sequences 
@@ -383,7 +384,7 @@ def merge_denoised_data(batch_to_analyse):
 		f"{qiime2_env}/qiime feature-table merge",  # Calling qiime feature-table merge
 		"--i-tables", feature_tables,  # Feature tables to be merged
 		"--o-merged-table", f"{denoise_dir}/table.qza",  # Output reports
-		"2>>", os.path.join(pipeline_reports, "1_merge1_combFeatureTable-report.log")])  # Output importSamplesQC report
+		"2>>", os.path.join(pipeline_reports, "merge1_combFeatureTable-report.log")])  # Output importSamplesQC report
 		subprocess.run(combFeatureTable, shell=True)
 
 		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Combining the representative sequences of all {len(batch_to_analyse)} sets of data: in progress ..')
@@ -393,7 +394,7 @@ def merge_denoised_data(batch_to_analyse):
 		f"{qiime2_env}/qiime feature-table merge-seqs",  # Calling qiime feature-table merge-seqs
 		"--i-data", sequence_tables,  # Representative sequences to be merged
 		"--o-merged-data", f"{denoise_dir}/representative_sequences.qza",  # Output reports
-		"2>>", os.path.join(pipeline_reports, "2_merge2_combSeqsTable-report.log")])  # Output importSamplesQC report
+		"2>>", os.path.join(pipeline_reports, "merge2_combSeqsTable-report.log")])  # Output importSamplesQC report
 		subprocess.run(combSeqsTable, shell=True)		
 	else:
 		subprocess.run(f'mv {denoise_dir}/*/decontam_filtered_table_noNegCtrls_noLowlyExprFeatures.qza {denoise_dir}/table.qza', shell=True)  # Moving table.qza to the denoising directory
@@ -407,7 +408,7 @@ def merge_denoised_data(batch_to_analyse):
 	"--i-table", f"{denoise_dir}/table.qza",  # The feature table to be summarized
 	"--m-sample-metadata-file", args.metadata,  # Metadata file
 	"--o-visualization", f"{denoise_dir}/feature_table.qzv",  # Output results to directory
-	"2>>", os.path.join(pipeline_reports, "3_merge_finfeatureTableSummary-report.log")])  # Output featureTableSummary report
+	"2>>", os.path.join(pipeline_reports, "merge3_finfeatureTableSummary-report.log")])  # Output featureTableSummary report
 	subprocess.run(finfeatureTableSummary, shell=True)
 	export(f"{denoise_dir}/feature_table.qzv")
 	return
@@ -436,7 +437,7 @@ def taxonomic_assignmnet():
 		"--p-r-primer", args.reversePrimer,  # Reverse primer sequence
 		"--i-sequences", silva_reference,  # Input reference seq artifact
 		"--o-reads", silva_reference_targeted,  # Output ref sequencing-like reads
-		"2>>", os.path.join(pipeline_reports, "1_taxonomyNB_extractRefReads-report.log")])  # Output extractRefReads report
+		"2>>", os.path.join(pipeline_reports, "taxonomyNB1_extractRefReads-report.log")])  # Output extractRefReads report
 		subprocess.run(extractRefReads, shell=True)
 
 		""" We can now train a Naive Bayes classifier as follows, using 
@@ -448,7 +449,7 @@ def taxonomic_assignmnet():
 		"--i-reference-reads", silva_reference_targeted,
 		"--i-reference-taxonomy", silva_taxonomy,
 		"--o-classifier", silva_99_classifier, 
-		"2>>", os.path.join(pipeline_reports, "2_taxonomyNB_trainClassifier-report.log")])  # Output trainClassifier report
+		"2>>", os.path.join(pipeline_reports, "taxonomyNB2_trainClassifier-report.log")])  # Output trainClassifier report
 		subprocess.run(trainClassifier, shell=True)
 		
 	
@@ -461,7 +462,7 @@ def taxonomic_assignmnet():
 	"--i-classifier", silva_99_classifier,  # Using Silva classifier
 	"--i-reads", os.path.join(denoise_dir, "representative_sequences.qza"),  # The output sequences
 	"--o-classification", os.path.join(taxonomy_dir, "taxonomic_classification.qza"),
-	"2>>", os.path.join(pipeline_reports, "1_taxonomy_assignTaxonomy-report.log")])  # Output assignTaxonomy report
+	"2>>", os.path.join(pipeline_reports, "taxonomy1_assignTaxonomy-report.log")])  # Output assignTaxonomy report
 	subprocess.run(assignTaxonomy, shell=True)
 
 	outputClassifications = ' '.join([
@@ -469,7 +470,7 @@ def taxonomic_assignmnet():
 	"--quiet",  # Silence output if execution is successful
 	"--m-input-file", os.path.join(taxonomy_dir, "taxonomic_classification.qza"),
 	"--o-visualization", os.path.join(taxonomy_dir, "taxonomic_classification.qzv"),
-	"2>>", os.path.join(pipeline_reports, "2_taxonomy_outputClassifications-report.log")])  # Output outputClassifications report
+	"2>>", os.path.join(pipeline_reports, "taxonomy2_outputClassifications-report.log")])  # Output outputClassifications report
 	subprocess.run(outputClassifications, shell=True)
 	export(os.path.join(taxonomy_dir, "taxonomic_classification.qzv"))
 
@@ -481,7 +482,7 @@ def taxonomic_assignmnet():
 	"--i-taxonomy", os.path.join(taxonomy_dir, "taxonomic_classification.qza"),
 	"--m-metadata-file", args.metadata,  # Metadata file
 	"--o-visualization", os.path.join(taxonomy_dir, "taxonomy_barplot.qzv"),
-	"2>>", os.path.join(pipeline_reports, "3_taxonomy_barplotOfTaxonomy-report.log")])  # Output barplotOfTaxonomy report
+	"2>>", os.path.join(pipeline_reports, "taxonomy3_barplotOfTaxonomy-report.log")])  # Output barplotOfTaxonomy report
 	subprocess.run(barplotOfTaxonomy, shell=True)
 	export(os.path.join(taxonomy_dir, "taxonomy_barplot.qzv"))
 	return
@@ -531,7 +532,7 @@ class phylogenetics():
 		"--o-masked-alignment", os.path.join(diversity_dir, "masked_aligned_representative_sequences.qza"),  # The masked alignment
 		"--o-tree", os.path.join(diversity_dir, "unrooted_tree.qza"),  # The unrooted phylogenetic tree
 		"--o-rooted-tree", os.path.join(diversity_dir, "rooted_tree.qza"),  # The rooted phylogenetic tree
-		"2>>", os.path.join(pipeline_reports, "1_phylogenetics_phylogeneticdiversity_dir-report.log")])  # Output phylogeneticdiversity_dir report
+		"2>>", os.path.join(pipeline_reports, "phylogenetics1_phylogeneticdiversity_dir-report.log")])  # Output phylogeneticdiversity_dir report
 		subprocess.run(phylogeneticdiversity_dir, shell=True)
 		return
 
@@ -549,7 +550,7 @@ class phylogenetics():
 		"--i-table", os.path.join(denoise_dir, "table.qza"),  # Input feature table
 		"--i-phylogeny", os.path.join(diversity_dir, "rooted_tree.qza"),  #  Input phylogeny for phylogenetic metrics
 		"--o-visualization", os.path.join(diversity_dir, "rarefaction_curves.qzv"),  # Output visualisation
-		"2>>", os.path.join(pipeline_reports, "3_phylogenetics_rarefactionCurvesAnalysis-report.log")])  # Output rarefactionCurvesAnalysis report
+		"2>>", os.path.join(pipeline_reports, "phylogenetics2_rarefactionCurvesAnalysis-report.log")])  # Output rarefactionCurvesAnalysis report
 		subprocess.run(rarefactionCurvesAnalysis, shell=True)
 		export(os.path.join(diversity_dir, "rarefaction_curves.qzv"))
 		return
@@ -558,7 +559,7 @@ class phylogenetics():
 		""" Common alpha and beta-diversity metrics and ordination plots (such as PCoA plots for weighted UniFrac distances) 
 		This command will also rarefy all samples to the sample sequencing depth before calculating these metrics 
 		(X is a placeholder for the lowest reasonable sample depth; samples with depth below this cut-off will be excluded) """
-		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")} Calculate multiple diversity metrics: in progress ..')
+		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")} Calculating multiple diversity metrics: in progress ..')
 		diversityMetrics =	' '.join([
 		f"{qiime2_env}/qiime diversity core-metrics-phylogenetic",  # Calling qiime2 diversity core-metrics-phylogenetic function
 		"--quiet",  # Silence output if execution is successful
@@ -568,7 +569,7 @@ class phylogenetics():
 		"--m-metadata-file", args.metadata,  # Metadata file
 		"--p-n-jobs-or-threads", args.threads, # The number of CPUs to be used for the computation
 		"--output-dir", os.path.join(diversity_dir, "core_metrics_results"),  # Output directory that will host the core metrics
-		"2>>", os.path.join(pipeline_reports, "4_phylogenetics_diversityMetrics-report.log")])  # Output diversityMetrics report
+		"2>>", os.path.join(pipeline_reports, "phylogenetics3_diversityMetrics-report.log")])  # Output diversityMetrics report
 		subprocess.run(diversityMetrics, shell=True)
 		export(os.path.join(diversity_dir, "core_metrics_results"))
 		return
@@ -597,8 +598,9 @@ def downstream_analysis():
 	downstream_dir,  # Output dir
 	"nonCancer,cancer",  # Groups for Differential Abundance Testing
 	accepted_protocol,  # Accepted protocol
-	args,threads,  # Number of cores to use
-	"2>>", os.path.join(pipeline_reports, "downstream_analysis-report.txt")])  # Directory where all reports reside
+	args.threads,  # Number of cores to use
+	# "2>>", os.path.join(pipeline_reports, "downstream_analysis-report.txt")
+	])  # Directory where all reports reside
 	subprocess.run(danalysis, shell=True)
 	return
 
@@ -726,25 +728,25 @@ def main():
 		print(f'- In total {len(R1list)} samples will be processed from {batch}..')
 		
 		
-		quality_control(batch, R1list)  # Checking the quality of the reads
+		# quality_control(batch, R1list)  # Checking the quality of the reads
 
 		## Preprocessing of the input data
-		primer_removal(batch, pairedReads)  # Performing quality trimming and removal of all primers on both reads
+		# primer_removal(batch, pairedReads)  # Performing quality trimming and removal of all primers on both reads
 		
-		denoising(batch)  # Qiime2 analysis - denoising
+		# denoising(batch)  # Qiime2 analysis - denoising
 
-		decontam(batch)  # Performing decontamination
+		# decontam(batch)  # Performing decontamination
 	
-	merge_denoised_data(batch_to_analyse)
+	# merge_denoised_data(batch_to_analyse)
 
-	taxonomic_assignmnet()
+	# taxonomic_assignmnet()
 
-	phylogenetics()
+	# phylogenetics()
 
 	downstream_analysis()
 
-	# ml_approach()
+	# # ml_approach()
 
-	summarisation()
+	# summarisation()
 
 if __name__ == "__main__": main()
