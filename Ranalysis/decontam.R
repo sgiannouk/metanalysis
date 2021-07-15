@@ -14,16 +14,19 @@ if (length(args) == 3) {
   quit()
 }
 
-# metatable <- "/Users/stavris/Desktop/Projects/metagenomics_analysis/check_decontam/table.qza"
+# metatable <- "/Users/stavris/Desktop/Projects/metagenomics_analysis/decontam/table.qza"
 # metadata <- "/Users/stavris/Desktop/Projects/metagenomics_analysis/check_decontam/clinical_data.txt"
-# outdir <- "/Users/stavris/Desktop/Projects/metagenomics_analysis/check_decontam"
+# outdir <- "/Users/stavris/Desktop/Projects/metagenomics_analysis/decontam"
 
 
 options(scipen = 999)
-library("decontam")
-library("phyloseq")
-library("ggplot2")
-library("qiime2R")
+suppressPackageStartupMessages({
+  library("decontam")
+  library("phyloseq")
+  library("ggplot2")
+  library("qiime2R")
+  library("biomformat")
+})
 
 
 
@@ -45,8 +48,8 @@ metatableframe$Index <- seq(nrow(metatableframe))
 ggplot(data=metatableframe, aes(x=Index, y=LibrarySize, color=SampleType)) + 
        geom_point() +
        theme_minimal() +
-       theme(plot.title = element_text(colour = "#a6a6a4", size=11))+
-       labs(x="Index", y="Library Size (number of reads)") +
+       theme(plot.title = element_text(colour = "#a6a6a4", size=11)) +
+       labs(x="Index", y="Library Size (number of reads)")
 ggsave(file=paste(outdir,"/library_sizes.png",sep=""), width = 10, height = 6, units = "in", dpi = 1200)
 
 # Decontam function
@@ -60,13 +63,13 @@ decontam_dataf <- isContaminant(metatableR, # A feature table recording the obse
                   normalize = TRUE, # Normalise
                   detailed = TRUE)
 
+# print(  paste("", sep="")    )
 # Obtaining the identified contaminant ASVs
 microbiome_asvs <- row.names(decontam_dataf[decontam_dataf$contaminant == FALSE, ])
 # Obtaining the ASV table from the metatableR 
 asv_table <- as.data.frame(otu_table(metatableR))
 # Final metatable without the identified contaminant ASVs
 final_metatable <- asv_table[row.names(asv_table) %in% microbiome_asvs, ]
-# Writing the output filtered feature table in a .biom format
-# write_biom(make_biom(final_metatable), biom_file=file.path(outdir, "decontam_filtered_table_R.biom"))
+# Writing the output filtered feature table in .tsv format
 write.table(final_metatable, file=paste(outdir,"/decontam_filtered_table.tsv", sep=""), sep="\t", row.names=T, col.names=NA, quote=F)
 
