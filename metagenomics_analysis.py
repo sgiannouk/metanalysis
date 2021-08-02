@@ -14,13 +14,13 @@ import shutil, fnmatch, glob, sys, os
 
 
 
-# batch_to_analyse = ["batch1", "batch2"]
-# inputDir = '/shared/projects/martyna_rrna_illumina_igtp/blood_microbiome'
-# metadata_file = "/shared/projects/martyna_rrna_illumina_igtp/blood_microbiome/clinical_data.txt"
+batch_to_analyse = ["batch1", "batch2"]
+inputDir = '/shared/projects/martyna_rrna_illumina_igtp/blood_microbiome'
+metadata_file = "/shared/projects/martyna_rrna_illumina_igtp/blood_microbiome/clinical_data.txt"
 
-batch_to_analyse = ["batch2",  "batch3", "batch4", "batch5"]
-inputDir = '/shared/projects/martyna_rrna_illumina_igtp/balf_microbiome'
-metadata_file = "/shared/projects/martyna_rrna_illumina_igtp/balf_microbiome/clinical_data.txt"
+# batch_to_analyse = ["batch2",  "batch3", "batch4", "batch5"]
+# inputDir = '/shared/projects/martyna_rrna_illumina_igtp/balf_microbiome'
+# metadata_file = "/shared/projects/martyna_rrna_illumina_igtp/balf_microbiome/clinical_data.txt"
 
 rscripts = f"{os.path.dirname(os.path.realpath(__file__))}/Ranalysis"
 # Calling Qiime2 tools from its conda environment
@@ -47,7 +47,7 @@ requiredArgs = parser.add_argument_group('required arguments')
 requiredArgs.add_argument('-i', '--input_dir', dest='input_dir', metavar='', required=False,
 						   help="Path of the input directory that contains the raw data.\nBoth forward and reverse reads are expected to be found\nin this directory.")
 # Number of threads/CPUs to be used
-parser.add_argument('-th', '--threads', dest='threads', default=str(70), metavar='', 
+parser.add_argument('-th', '--threads', dest='threads', default=str(50), metavar='', 
                 	help="Number of threads to be used in the analysis")
 # Number of threads/CPUs to be used
 parser.add_argument('-fp', '--forwardPrimer', dest='forwardPrimer', default="CCTACGGGNGGCWGCAG", metavar='', required=False, 
@@ -75,8 +75,8 @@ args.metadata = metadata_file
 args.input_dir = inputDir
 
 # Main directories hosting the analysis
-# analysis_dir = os.path.join(args.output_dir, "blood_metanalysis")
-analysis_dir = os.path.join(args.output_dir, "balf_metanalysis")
+analysis_dir = os.path.join(args.output_dir, "blood_metanalysis")
+# analysis_dir = os.path.join(args.output_dir, "balf_metanalysis")
 reports_dir = os.path.join(analysis_dir, "reports")  # Reports directory
 prepr_dir = os.path.join(analysis_dir, "preprocessed_data")  # Save processed .fastq files
 inputqiime_dir = os.path.join(analysis_dir, "qiime2_input_data")  # Input data directory
@@ -174,7 +174,7 @@ def quality_control(batch, R1list):
 	subprocess.run(multiQC, shell=True)
 
 
-	os.system(f'rm {prepr_qc_reports}/*fastqc.zip')  # Removing zipped fastqc files
+	# os.system(f'rm {prepr_qc_reports}/*fastqc.zip')  # Removing zipped fastqc files
 	os.system(f'mv {prepr_qc_reports}/summarised_report*.html {reports_dir}')  # Moving summary reports in the reports folder
 	# os.system(f'rm -r {qc_reports}/*/summarised_report_*data')  # Removing MultiQC temporary folder
 	return
@@ -615,7 +615,7 @@ def ml_approach():
 	"--i-table", os.path.join(denoise_dir, "table.qza"),
 	"--m-metadata-file", args.metadata,
 	"--m-metadata-column", "Indication_I",
-	# "--p-random-state", "500",
+	"--p-random-state", "500",
 	# "--p-n-jobs", str(args.threads),
 	"--output-dir", random_forest_dir,
 	# "2>>", os.path.join(pipeline_reports, "qiime2_random_forest-report.log")
@@ -730,7 +730,7 @@ def main():
 		
 		# quality_control(batch, R1list)  # Checking the quality of the reads
 
-		## Preprocessing of the input data
+		# # Preprocessing of the input data
 		# primer_removal(batch, pairedReads)  # Performing quality trimming and removal of all primers on both reads
 		
 		# denoising(batch)  # Qiime2 analysis - denoising
@@ -743,9 +743,9 @@ def main():
 
 	# phylogenetics()
 
-	downstream_analysis()
+	# downstream_analysis()
 
-	# # ml_approach()
+	# ml_approach()
 
 	# summarisation()
 
