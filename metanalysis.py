@@ -47,7 +47,7 @@ requiredArgs = parser.add_argument_group('required arguments')
 requiredArgs.add_argument('-i', '--input_dir', dest='input_dir', metavar='', required=False,
 						   help="Path of the input directory that contains the raw data.\nBoth forward and reverse reads are expected to be found\nin this directory.")
 # Number of threads/CPUs to be used
-parser.add_argument('-th', '--threads', dest='threads', default=str(50), metavar='', 
+parser.add_argument('-th', '--threads', dest='threads', default=str(30), metavar='', 
                 	help="Number of threads to be used in the analysis")
 # Number of threads/CPUs to be used
 parser.add_argument('-fp', '--forwardPrimer', dest='forwardPrimer', default="CCTACGGGNGGCWGCAG", metavar='', required=False, 
@@ -728,25 +728,25 @@ def main():
 		print(f'- In total {len(R1list)} samples will be processed from {batch}..')
 		
 		
-		# quality_control(batch, R1list)  # Checking the quality of the reads
+		quality_control(batch, R1list)  # Checking the quality of the reads
 
-		# # Preprocessing of the input data
-		# primer_removal(batch, pairedReads)  # Performing quality trimming and removal of all primers on both reads
+		# Preprocessing of the input data
+		primer_removal(batch, pairedReads)  # Performing quality trimming and removal of all primers on both reads
 		
-		# denoising(batch)  # Qiime2 analysis - denoising
+		denoising(batch)  # Qiime2 analysis - denoising
 
-		# decontam(batch)  # Performing decontamination
+		decontam(batch)  # Performing decontamination
 	
-	# merge_denoised_data(batch_to_analyse)
+	merge_denoised_data(batch_to_analyse)
 
-	# taxonomic_assignmnet()
+	taxonomic_assignmnet()
 
-	# phylogenetics()
+	phylogenetics()
 
 	# downstream_analysis()
 
 	# ml_approach()
 
-	# summarisation()
+	summarisation()
 
 if __name__ == "__main__": main()
